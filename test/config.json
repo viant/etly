@@ -1,0 +1,20 @@
+{
+  "Transfers": [
+    {
+      "Source": "file://<pwd>test/data/in",
+      "SourceType": "url",
+      "SourceFormat": "ndjson",
+      "SourceDataType": "service_test.Log1",
+      "Target": "file://<pwd>test/data/out/<mod:2>_<file>",
+      "TargetType": "url",
+      "TimeWindow": 1,
+      "TimeWindowUnit": "sec",
+      "MetaUrl": "file://<pwd>test/data/out/meta.json",
+      "Transformer": "service_test.Log1ToLog2",
+      "TimeFrequency": 1,
+      "TimeFrequencyUnit": "sec",
+      "MaxParallelTransfers":2,
+      "MaxTransfers":10
+    }
+  ]
+}
