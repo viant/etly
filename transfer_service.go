@@ -189,7 +189,7 @@ func (s *TransferService) transferObject(source storage.Object, transfer *Transf
 	}
 
 	defer func() {
-		atomic.AddInt32(&progress.FileProcessed, 0)
+		atomic.AddInt32(&progress.FileProcessed, 1)
 	}()
 
 	reader, err := s.StorageService.Download(source)
