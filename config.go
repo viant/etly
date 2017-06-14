@@ -7,16 +7,19 @@ import (
 
 //Transfer represents transfer rule
 type Transfer struct {
-	Name                 string
-	Source               string
-	SourceType           string //url,table
-	SourceFormat         string //nd_json,json
-	SourceExt            string
-	SourceEncoding       string //gzip
-	SourceDataType       string //name of source struct
-	SourceDataTypeMatch  []*SourceDataType
-	Target               string
+	Name                string
+	Source              string
+	SourceType          string //url,table
+	SourceFormat        string //nd_json,json
+	SourceExt           string
+	SourceEncoding      string //gzip
+	SourceDataType      string //name of source struct
+	SourceDataTypeMatch []*SourceDataType
+	Target              string
+
+	TransferMethod       string //upload only if url to datastore
 	TargetType           string //url,table
+	TargetSchemaUrl      string //url for target schema
 	TargetEncoding       string //gzip
 	TimeWindow           int    //how long back go in time - to be used with <dateFormat:XX> expression
 	TimeWindowUnit       string //time unit: sec, min, hour, day
@@ -25,10 +28,10 @@ type Transfer struct {
 	MetaUrl              string
 	Transformer          string //name of registered transformer
 	Filter               string //name of registered filter predicate
-
-	TimeFrequency     int
-	TimeFrequencyUnit string
-	nextRun           *time.Time
+	VariableExtraction   []*VariableExtraction
+	TimeFrequency        int
+	TimeFrequencyUnit    string
+	nextRun              *time.Time
 }
 
 func (t *Transfer) scheduleNextRun(now time.Time) error {
@@ -58,6 +61,7 @@ func (t *Transfer) Clone(source, target, metaUrl string) *Transfer {
 		SourceDataType:       t.SourceDataType,
 		Target:               target,
 		TargetType:           t.TargetType,
+		TargetSchemaUrl:      t.TargetSchemaUrl,
 		TargetEncoding:       t.TargetEncoding,
 		MetaUrl:              metaUrl,
 		TimeWindow:           t.TimeWindow,
@@ -66,6 +70,7 @@ func (t *Transfer) Clone(source, target, metaUrl string) *Transfer {
 		MaxParallelTransfers: t.MaxParallelTransfers,
 		MaxTransfers:         t.MaxTransfers,
 		Transformer:          t.Transformer,
+		VariableExtraction:   t.VariableExtraction,
 		Filter:               t.Filter,
 	}
 }
@@ -83,11 +88,27 @@ type StorageConfig struct {
 	Config    string
 }
 
+//DatastoreConfig represents datastorage config to be used to register various storage schema protocols with storage namepsace
+type DatastoreConfig struct {
+	Namespace string
+	Schema    string
+	Config    string
+}
+
+//VariableExtraction represents variable extraction rule
+type VariableExtraction struct {
+	Name    string
+	RegExpr string
+	Path    string // for record you need path
+	Source  string // sourceUrl, record
+}
+
 //Config ETL config
 type Config struct {
-	Transfers []*Transfer
-	Storage   []*StorageConfig
-	Port      int
+	Transfers       []*Transfer
+	Storage         []*StorageConfig
+	DatastoreConfig []*DatastoreConfig
+	Port            int
 }
 
 //NewConfigFromUrl creates a new config from URL

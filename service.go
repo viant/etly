@@ -13,6 +13,7 @@ import (
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
+var statusTaskCheckCount = 10
 
 type Service struct {
 	config           *Config
@@ -29,7 +30,7 @@ func (s *Service) Status() string {
 	}
 
 	for i, task := range tasks {
-		if i > 10 {
+		if i > statusTaskCheckCount {
 			break
 		}
 		if task.Status == taskErrorStatus {

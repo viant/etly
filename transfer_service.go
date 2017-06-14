@@ -7,6 +7,7 @@ import (
 	"github.com/viant/toolbox/storage"
 	"io"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -103,17 +104,139 @@ func (s *TransferService) persistMeta(meta *Meta) error {
 	return s.StorageService.Upload(meta.URL, bytes.NewReader(buffer.Bytes()))
 }
 
-func (s *TransferService) transferFromExpandedUrl(transfer *Transfer, progress *TransferProgress) (*Meta, error) {
-	var now = time.Now()
+func buildVariableMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
+	var result = make(map[string]string)
+	for _, variableExtraction := range variableExtractionRules {
+		var value = ""
+		switch variableExtraction.Source {
+		case "source":
+
+			compiledExpression, err := regexp.Compile(variableExtraction.RegExpr)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
+			}
+			if compiledExpression.MatchString(source.URL()) {
+				matched := compiledExpression.FindStringSubmatch(source.URL())
+				value = matched[0]
+			}
+
+			result[variableExtraction.Name] = value
+
+		case "record":
+			return nil, fmt.Errorf("Not supporte yet, keep waiting,  source: %v", variableExtraction.Source)
+
+		default:
+			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
+
+		}
+	}
+	return result, nil
+}
+
+func expandVaiables(text string, variables map[string]string) string {
+	for k, v := range variables {
+		if strings.Contains(text, k) {
+			text = strings.Replace(text, k, v, -1)
+		}
+	}
+	return text
+}
+
+func (s *TransferService) expandTransferWithVariableExpression(transfer *Transfer, storeObjects []storage.Object) ([]*StorageObjectTransfer, error) {
+	var groupedTransfers = make(map[string]*StorageObjectTransfer)
+	for _, storageObject := range storeObjects {
+		var variables, err = buildVariableMap(transfer.VariableExtraction, storageObject)
+		if err != nil {
+			return nil, err
+		}
+		expandedTarget := expandVaiables(transfer.Target, variables)
+		expandedMetaUrl := expandVaiables(transfer.MetaUrl, variables)
+		key := expandedTarget + expandedMetaUrl
+
+		storageTransfer, found := groupedTransfers[key]
+		if !found {
+			storageTransfer = &StorageObjectTransfer{
+				Transfer:       transfer.Clone(transfer.Source, expandedTarget, expandedMetaUrl),
+				StorageObjects: make([]storage.Object, 0),
+			}
+		}
+		storageTransfer.StorageObjects = append(storageTransfer.StorageObjects, storageObject)
+
+	}
+	var result = make([]*StorageObjectTransfer, 0)
+	for _, storageTransfer := range groupedTransfers {
+		result = append(result, storageTransfer)
+	}
+	return result, nil
+}
+
+func (s *TransferService) transferFromExpandedUrl(transfer *Transfer, progress *TransferProgress) ([]*Meta, error) {
+
 	var candidates = make([]storage.Object, 0)
 	err := s.appendContentObject(transfer.Source, &candidates)
 	if err != nil {
 		return nil, err
 	}
+
+	if len(transfer.VariableExtraction) == 0 {
+		meta, err := s.transferFromUrl(&StorageObjectTransfer{
+			Transfer:       transfer,
+			StorageObjects: candidates,
+		}, progress)
+		if err != nil {
+			return nil, err
+		}
+		return []*Meta{meta}, nil
+	}
+	var result = make([]*Meta, 0)
+
+	storageTransfers, err := s.expandTransferWithVariableExpression(transfer, candidates)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, storageTransfer := range storageTransfers {
+		meta, err := s.transferFromUrl(storageTransfer, progress)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, meta)
+	}
+
+	return result, nil
+
+}
+
+func (s *TransferService) transferFromUrl(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+	transfer := storageTransfer.Transfer
+	switch transfer.SourceType {
+	case "url":
+
+		switch transfer.Target {
+		case "url":
+			return s.transferFromUrlToUrl(storageTransfer, progress)
+		case "datastore":
+			return s.transferFromUrlToDatastore(storageTransfer, progress)
+		}
+	case "datastore":
+		return nil, fmt.Errorf("Unsupported yet, keep waiting for soruce type: %v", transfer.SourceType)
+	}
+	return nil, fmt.Errorf("Unsupported transfer for soruce type: %v", transfer.SourceType)
+}
+
+func (s *TransferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+	//TODO big query transfer
+	return nil, nil
+}
+
+func (s *TransferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+	transfer := storageTransfer.Transfer
+	candidates := storageTransfer.StorageObjects
 	meta, err := s.loadMeta(transfer.MetaUrl)
 	if err != nil {
 		return nil, err
 	}
+	var now = time.Now()
 	var source = transfer.Source
 	var target = transfer.Target
 	var metaUrl = transfer.MetaUrl
