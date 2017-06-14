@@ -13,6 +13,7 @@ import (
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
+var statusTaskCheckCount = 10
 
 type Service struct {
 	config           *Config
@@ -29,7 +30,7 @@ func (s *Service) Status() string {
 	}
 
 	for i, task := range tasks {
-		if i > 10 {
+		if i > statusTaskCheckCount {
 			break
 		}
 		if task.Status == taskErrorStatus {
@@ -42,7 +43,7 @@ func (s *Service) Status() string {
 func (s *Service) Start() error {
 
 	if !atomic.CompareAndSwapInt32(&s.isRunning, 0, 1) {
-		return errors.New("Service has been aready started")
+		return errors.New("Service has been already started")
 	}
 
 	go func() {
@@ -119,30 +120,38 @@ func (s *Service) Stop() {
 
 func NewService(config *Config) (*Service, error) {
 	storageService := storage.NewService()
-	transferService := NewTransferService(storageService, toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
+	transferService := &TransferService{
+		storageService,
+		toolbox.NewJSONDecoderFactory(),
+		toolbox.NewJSONEncoderFactory(),
+	}
+	taskRegistry := &TaskRegistry{
+		History: make([]*Task, 0),
+		Active:  make([]*Task, 0),
+	}
 	var result = &Service{
 		config:           config,
 		isRunning:        0,
 		stopNotification: make(chan bool, 1),
 		transferService:  transferService,
-		taskRegistry:     NewTaskRegistry(),
+		taskRegistry:     taskRegistry,
 	}
 
 	if len(config.Storage) > 0 {
-		for _, storage := range config.Storage {
-			if storage.Namespace == "" {
-				storage.Namespace = storage.Schema
+		for _, store := range config.Storage {
+			if store.Namespace == "" {
+				store.Namespace = store.Schema
 			}
-			provider := NewStorageProvider().Get(storage.Namespace)
+			provider := NewStorageProvider().Get(store.Namespace)
 			if provider == nil {
-				return nil, fmt.Errorf("Failed to lookup storage provider for '%v'", storage.Namespace)
+				return nil, fmt.Errorf("Failed to lookup storage provider for '%v'", store.Namespace)
 			}
 
-			service, err := provider(storage)
+			service, err := provider(store)
 			if err != nil {
 				return nil, err
 			}
-			storageService.Register(storage.Schema, service)
+			storageService.Register(store.Schema, service)
 		}
 	}
 	return result, nil

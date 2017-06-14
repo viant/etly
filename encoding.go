@@ -8,9 +8,13 @@ import (
 	"io/ioutil"
 )
 
+const (
+	GzipEncoding = "gzip"
+)
+
 func getEncodingReader(encoding string, reader io.Reader) (encodingReader io.Reader, err error) {
 	switch encoding {
-	case "gzip":
+	case GzipEncoding:
 		content, err := ioutil.ReadAll(reader)
 		if err != nil {
 			return nil, err
@@ -34,7 +38,7 @@ func getEncodingReader(encoding string, reader io.Reader) (encodingReader io.Rea
 
 func encodeData(encoding string, data []byte) (io.Reader, error) {
 	switch encoding {
-	case "gzip":
+	case GzipEncoding:
 		buffer := new(bytes.Buffer)
 		writer := gzip.NewWriter(buffer)
 		_, err := writer.Write(data)

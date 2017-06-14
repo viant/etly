@@ -18,7 +18,6 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 	now := time.Now()
 	result := &TransferTask{
 		Transfer: transfer,
-
 		Progress: &TransferProgress{
 			startTime: &now,
 			StartDate: now.String(),
@@ -31,5 +30,4 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 	}
 	result.Task = task
 	return result
-
 }

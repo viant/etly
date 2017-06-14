@@ -2,12 +2,13 @@ package etly_test
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/viant/etly"
-	"github.com/viant/toolbox"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/viant/etly"
+	"github.com/viant/toolbox"
 )
 
 type Log1 struct {
@@ -50,7 +51,7 @@ func TestService_Run(t *testing.T) {
 	}
 
 	var configUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/config.json"
-	config, err := etly.NewConfigFromUrl(configUrl)
+	config, err := etly.NewConfigFromURL(configUrl)
 	assert.Nil(t, err)
 	s, err := etly.NewService(config)
 	if err != nil {

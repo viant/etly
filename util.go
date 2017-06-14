@@ -2,12 +2,13 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
 	"hash/fnv"
 	"net/url"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/viant/toolbox"
 )
 
 const timeVariableExpr = "<dateFormat:"
@@ -16,13 +17,13 @@ const modeVarableExpr = "<mod:"
 func timeUnitFactor(timeUnit string) (int64, error) {
 	switch strings.ToLower(timeUnit) {
 	case "day":
-		return int64(1000*3600*24) * int64(time.Millisecond), nil
+		return 24 * int64(time.Hour), nil
 	case "hour":
-		return int64(1000*3600) * int64(time.Millisecond), nil
+		return int64(time.Hour), nil
 	case "min":
-		return int64(1000*60) * int64(time.Millisecond), nil
+		return int64(time.Minute), nil
 	case "sec":
-		return int64(1000) * int64(time.Millisecond), nil
+		return int64(time.Second), nil
 	}
 	return 0, fmt.Errorf("Unsupported time unit %v", timeUnit)
 }
@@ -114,12 +115,12 @@ func expandCurrentWorkingDirectory(text string) string {
 	return text
 }
 
-func extractFileNameFromUrl(URL string) string {
-	parsedUrl, err := url.Parse(URL)
+func extractFileNameFromURL(URL string) string {
+	parsedURL, err := url.Parse(URL)
 	if err != nil {
 		return ""
 	}
-	_, file := path.Split(parsedUrl.Path)
+	_, file := path.Split(parsedURL.Path)
 	return file
 }
 
