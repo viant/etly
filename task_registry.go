@@ -2,8 +2,9 @@ package etly
 
 import "sync"
 
-var maxHistory = 100
+const MaxHistory = 100
 
+// TaskRegistry contains list of active and finished tasks.
 type TaskRegistry struct {
 	activeMutex  *sync.Mutex
 	historyMutex *sync.Mutex
@@ -11,13 +12,14 @@ type TaskRegistry struct {
 	History      []*Task
 }
 
+// Register a task to TaskRegistry
 func (t *TaskRegistry) Register(task *Task) {
 	t.activeMutex.Lock()
 	defer t.activeMutex.Unlock()
 	var tasks = make([]*Task, 0)
 	tasks = append(tasks, task)
 	for _, active := range t.Active {
-		if active.Status != "RUNNING" {
+		if active.Status != taskRunningStatus {
 			tasks = append(tasks, active)
 		}
 		t.Archive(active)
@@ -31,7 +33,7 @@ func (t *TaskRegistry) Archive(task *Task) {
 	var tasks = make([]*Task, 0)
 	tasks = append(tasks, task)
 	for _, history := range t.History {
-		if len(tasks) > maxHistory {
+		if len(tasks) > MaxHistory {
 			break
 		}
 		tasks = append(tasks, history)
@@ -55,7 +57,8 @@ func (t *TaskRegistry) GetByIds(ids ...string) []*Task {
 		idMap[id] = true
 	}
 	var result = make([]*Task, 0)
-	findTask(t.Active, t.activeMutex, &result, idMap)
+	findTask(t.Active, t.activeMutex,
+		&result, idMap)
 	findTask(t.History, t.historyMutex, &result, idMap)
 	return result
 }
@@ -71,13 +74,4 @@ func (t *TaskRegistry) GetAll() []*Task {
 	appendTask(t.Active, t.activeMutex, &result)
 	appendTask(t.History, t.historyMutex, &result)
 	return result
-}
-
-func NewTaskRegistry() *TaskRegistry {
-	return &TaskRegistry{
-		Active:       make([]*Task, 0),
-		History:      make([]*Task, 0),
-		historyMutex: &sync.Mutex{},
-		activeMutex:  &sync.Mutex{},
-	}
 }

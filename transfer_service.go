@@ -3,13 +3,14 @@ package etly
 import (
 	"bytes"
 	"fmt"
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
 	"io"
 	"io/ioutil"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
 )
 
 type TransferService struct {
@@ -38,21 +39,21 @@ func (s *TransferService) appendContentObject(folderUrl string, collection *[]st
 	return nil
 }
 
-func (t *TransferService) Run(task *TransferTask) (err error) {
+func (s *TransferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
-	defer func() {
+	defer func(error) {
 		task.Status = taskDoneStatus
 		if err != nil {
 			task.Error = err.Error()
 			task.Status = taskErrorStatus
 		}
 
-	}()
-	return t.Transfer(task.Transfer, task.Progress)
+	}(err)
+	return s.Transfer(task.Transfer, task.Progress)
 }
 
 func (s *TransferService) Transfer(transfer *Transfer, progress *TransferProgress) error {
-	var transfers, err = s.expandTransfer(transfer)
+	transfers, err := s.expandTransfer(transfer)
 	if err != nil {
 		return err
 	}
@@ -110,13 +111,13 @@ func (s *TransferService) transferFromExpandedUrl(transfer *Transfer, progress *
 	if err != nil {
 		return nil, err
 	}
-	meta, err := s.loadMeta(transfer.MetaUrl)
+	meta, err := s.loadMeta(transfer.MetaURL)
 	if err != nil {
 		return nil, err
 	}
 	var source = transfer.Source
 	var target = transfer.Target
-	var metaUrl = transfer.MetaUrl
+	var metaUrl = transfer.MetaURL
 	//all processed nothing new, the current assumption is that the whole file is process at once.
 	for len(meta.Processed) == len(candidates) {
 		return nil, nil
@@ -143,7 +144,7 @@ func (s *TransferService) transferFromExpandedUrl(transfer *Transfer, progress *
 			targetTransfer.Target = expandModExpressionIfPresent(transferSource.Target, hash(candidate.URL()))
 
 			if strings.Contains(targetTransfer.Target, "<file>") {
-				targetTransfer.Target = strings.Replace(targetTransfer.Target, "<file>", extractFileNameFromUrl(candidate.URL()), 1)
+				targetTransfer.Target = strings.Replace(targetTransfer.Target, "<file>", extractFileNameFromURL(candidate.URL()), 1)
 			}
 
 			startTime := time.Now()
@@ -300,7 +301,7 @@ func (s *TransferService) expandTransfer(transfer *Transfer) ([]*Transfer, error
 		source = expandCurrentWorkingDirectory(source)
 		var target = expandDateExpressionIfPresent(transfer.Target, &sourceTime)
 		target = expandCurrentWorkingDirectory(target)
-		var metaUrl = expandDateExpressionIfPresent(transfer.MetaUrl, &sourceTime)
+		var metaUrl = expandDateExpressionIfPresent(transfer.MetaURL, &sourceTime)
 		metaUrl = expandCurrentWorkingDirectory(metaUrl)
 		transferKey := source + "//" + target + "//" + metaUrl
 		candidate, found := transfers[transferKey]
@@ -314,12 +315,4 @@ func (s *TransferService) expandTransfer(transfer *Transfer) ([]*Transfer, error
 		result = append(result, t)
 	}
 	return result, nil
-}
-
-func NewTransferService(storageService storage.Service, decoderFactory toolbox.DecoderFactory, encoderFactory toolbox.EncoderFactory) *TransferService {
-	return &TransferService{
-		StorageService: storageService,
-		decoderFactory: decoderFactory,
-		encoderFactory: encoderFactory,
-	}
 }

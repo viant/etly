@@ -7,26 +7,22 @@ import (
 	"net/http"
 )
 
-var uriBasePath = "/etly/"
+const uriBasePath = "/etly/"
 
 type Server struct {
-	config  *Config
-	service *Service
+	config *Config
+	*Service
 }
 
 func (s *Server) Start() (err error) {
-	err = s.service.Start()
+	err = s.Start()
 	if err != nil {
 		return err
 	}
-	defer s.service.Stop()
+	defer s.Stop()
 	logger.Printf("Starting ETL service on port %v", s.config.Port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), nil))
 	return nil
-}
-
-func (s *Server) Stop() {
-	s.service.Stop()
 }
 
 func NewServer(config *Config) (*Server, error) {
@@ -36,7 +32,7 @@ func NewServer(config *Config) (*Server, error) {
 	}
 	var result = &Server{
 		config:  config,
-		service: service,
+		Service: service,
 	}
 
 	router := toolbox.NewServiceRouter(
