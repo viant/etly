@@ -11,15 +11,15 @@ const uriBasePath = "/etly/"
 
 type Server struct {
 	config *Config
-	*Service
+	Service *Service
 }
 
 func (s *Server) Start() (err error) {
-	err = s.Start()
+	err = s.Service.Start()
 	if err != nil {
 		return err
 	}
-	defer s.Stop()
+	defer s.Service.Stop()
 	logger.Printf("Starting ETL service on port %v", s.config.Port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), nil))
 	return nil

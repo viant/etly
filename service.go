@@ -2,9 +2,7 @@ package etly
 
 import (
 	"errors"
-	"fmt"
 	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
 	"log"
 	"net/http"
 	"os"
@@ -19,7 +17,7 @@ type Service struct {
 	config           *Config
 	isRunning        int32
 	stopNotification chan bool
-	transferService  *TransferService
+	transferService  *transferService
 	taskRegistry     *TaskRegistry
 }
 
@@ -119,40 +117,15 @@ func (s *Service) Stop() {
 }
 
 func NewService(config *Config) (*Service, error) {
-	storageService := storage.NewService()
-	transferService := &TransferService{
-		storageService,
-		toolbox.NewJSONDecoderFactory(),
-		toolbox.NewJSONEncoderFactory(),
-	}
-	taskRegistry := &TaskRegistry{
-		History: make([]*Task, 0),
-		Active:  make([]*Task, 0),
-	}
+
+	transferService := newTransferService(NewBigqueryService(), toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
+	taskRegistry := NewTaskRegistry()
 	var result = &Service{
 		config:           config,
 		isRunning:        0,
 		stopNotification: make(chan bool, 1),
 		transferService:  transferService,
 		taskRegistry:     taskRegistry,
-	}
-
-	if len(config.Storage) > 0 {
-		for _, store := range config.Storage {
-			if store.Namespace == "" {
-				store.Namespace = store.Schema
-			}
-			provider := NewStorageProvider().Get(store.Namespace)
-			if provider == nil {
-				return nil, fmt.Errorf("Failed to lookup storage provider for '%v'", store.Namespace)
-			}
-
-			service, err := provider(store)
-			if err != nil {
-				return nil, err
-			}
-			storageService.Register(store.Schema, service)
-		}
 	}
 	return result, nil
 }

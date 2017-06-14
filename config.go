@@ -2,72 +2,166 @@ package etly
 
 import (
 	"time"
-
 	"github.com/viant/toolbox"
+	"strings"
+	"fmt"
 )
 
 //Transfer represents transfer rule
 type Transfer struct {
-	Name                string
-	Source              string
-	SourceType          string //url,table
-	SourceFormat        string //nd_json,json
-	SourceExt           string
-	SourceEncoding      string //gzip
-	SourceDataType      string //name of source struct
-	SourceDataTypeMatch []*SourceDataType
-	Target              string
+	Name string
 
-	TransferMethod       string //upload only if url to datastore
-	TargetType           string //url,table
-	TargetSchemaUrl      string //url for target schema
-	TargetEncoding       string //gzip
-	TimeWindow           int    //how long back go in time - to be used with <dateFormat:XX> expression
-	TimeWindowUnit       string //time unit: sec, min, hour, day
+	Source *Source
+	Target *Target
+	Meta   *Resource
+
+	TimeWindow *Duration
+	Frequency  *Duration
+
 	MaxParallelTransfers int
 	MaxTransfers         int
-	MetaURL              string
-	Transformer          string //name of registered transformer
-	Filter               string //name of registered filter predicate
-	VariableExtraction   []*VariableExtraction
-	TimeFrequency        int
-	TimeFrequencyUnit    string
-	nextRun              *time.Time
+
+	Transformer        string //name of registered transformer
+	Filter             string //name of registered filter predicate
+	VariableExtraction []*VariableExtraction
+
+	nextRun *time.Time
+}
+
+type Resource struct {
+	Name           string
+	Type           string //url,datastore
+	DataFormat     string //nd_json,json
+	Compression    string //gzip
+	Encoding       string
+	CredentialFile string
+}
+
+func (r *Resource) Clone() *Resource {
+	if r == nil {
+		return nil
+	}
+	return &Resource{
+		Name:           r.Name,
+		Type:           r.Type,
+		DataFormat:     r.DataFormat,
+		Compression:    r.Compression,
+		Encoding:       r.Encoding,
+		CredentialFile: r.CredentialFile,
+	}
+}
+
+type StructuredResource struct {
+	*Resource
+	DataType string //app data object name
+	Schema   *Resource
+}
+
+func (r *StructuredResource) Clone() *StructuredResource {
+	if r == nil {
+		return nil
+	}
+	var result = &StructuredResource{
+		Resource: r.Resource.Clone(),
+		DataType: r.DataType,
+		Schema:   r.Schema.Clone(),
+	}
+	return result
+}
+
+type Source struct {
+	*StructuredResource
+	FilterRegExp     string
+	DataTypeMatch []*DataTypeMatch
+}
+
+
+func (r *Source) Clone() *Source {
+	if r == nil {
+		return nil
+	}
+	var result = &Source{
+		StructuredResource: r.StructuredResource.Clone(),
+		FilterRegExp:          r.FilterRegExp,
+		DataTypeMatch:      r.DataTypeMatch,
+	}
+	return result
+}
+
+type Target struct {
+	*StructuredResource
+	TransferMethod string //upload only if url to datastore
+}
+
+func (r *Target) Clone() *Target {
+	if r == nil {
+		return nil
+	}
+	var result = &Target{
+		StructuredResource: r.StructuredResource.Clone(),
+		TransferMethod:     r.TransferMethod,
+	}
+	return result
+}
+
+type Duration struct {
+	Duration int
+	Unit     string
+}
+
+func (d *Duration) TimeUnit() (time.Duration, error) {
+	switch strings.ToLower(d.Unit) {
+	case "day":
+		return 24 * time.Hour, nil
+	case "hour":
+		return time.Hour, nil
+	case "min":
+		return time.Minute, nil
+	case "sec":
+		return time.Second, nil
+	}
+	return 0, fmt.Errorf("Unsupported time unit %v", d.Unit)
+}
+
+func (d *Duration) Get() (time.Duration, error) {
+	timeUnit, err := d.TimeUnit()
+	if err != nil {
+		return 0, err
+	}
+	return  timeUnit * time.Duration(d.Duration), nil
 }
 
 func (t *Transfer) scheduleNextRun(now time.Time) error {
-	timeUnitFactor, err := timeUnitFactor(t.TimeFrequencyUnit)
+	delta, err := t.Frequency.Get()
 	if err != nil {
 		return err
 	}
-	delta := time.Duration(timeUnitFactor * int64(t.TimeFrequency))
 	nextRun := now.Add(delta)
 	t.nextRun = &nextRun
 	return nil
 }
 
 func (t *Transfer) String() string {
-	return "[id: " + t.Name + ", Source: " + t.Source + ", Target: " + t.Target + "]"
+	return "[id: " + t.Name + ", Source: " + t.Source.Name + ", Target: " + t.Target.Name + "]"
+}
+
+func (t *Transfer) New(source, target, MetaURL string) *Transfer {
+ 	var result = t.Clone()
+	result.Source.Name = source
+	result.Target.Name = target
+	result.Meta.Name = MetaURL
+	return result
 }
 
 //Clone creates a copy of the transfer
-func (t *Transfer) Clone(source, target, MetaURL string) *Transfer {
+func (t *Transfer) Clone() *Transfer {
 	return &Transfer{
 		Name:                 t.Name,
-		Source:               source,
-		SourceType:           t.SourceType,
-		SourceExt:            t.SourceExt,
-		SourceFormat:         t.SourceFormat,
-		SourceEncoding:       t.SourceEncoding,
-		SourceDataType:       t.SourceDataType,
-		Target:               target,
-		TargetType:           t.TargetType,
-		TargetSchemaUrl:      t.TargetSchemaUrl,
-		TargetEncoding:       t.TargetEncoding,
-		MetaURL:              MetaURL,
+		Source:               t.Source.Clone(),
+		Target:               t.Target.Clone(),
+		Meta:                 t.Meta.Clone(),
 		TimeWindow:           t.TimeWindow,
-		TimeWindowUnit:       t.TimeWindowUnit,
-		SourceDataTypeMatch:  t.SourceDataTypeMatch,
+		Frequency:            t.Frequency,
 		MaxParallelTransfers: t.MaxParallelTransfers,
 		MaxTransfers:         t.MaxTransfers,
 		Transformer:          t.Transformer,
@@ -76,25 +170,12 @@ func (t *Transfer) Clone(source, target, MetaURL string) *Transfer {
 	}
 }
 
-//SourceDataType represents a source data type matching rule,
-type SourceDataType struct {
+//DataTypeMatch represents a source data type matching rule,
+type DataTypeMatch struct {
 	MatchingFragment string
 	DataType         string
 }
 
-//StorageConfig represents storage config to be used to register various storage schema protocols with storage namepsace
-type StorageConfig struct {
-	Namespace string
-	Schema    string
-	Config    string
-}
-
-//DatastoreConfig represents datastorage config to be used to register various storage schema protocols with storage namepsace
-type DatastoreConfig struct {
-	Namespace string
-	Schema    string
-	Config    string
-}
 
 //VariableExtraction represents variable extraction rule
 type VariableExtraction struct {
@@ -107,13 +188,12 @@ type VariableExtraction struct {
 //Config ETL config
 type Config struct {
 	Transfers       []*Transfer
-	Storage         []*StorageConfig
-	DatastoreConfig []*DatastoreConfig
 	Port            int
 }
 
 //NewConfigFromURL creates a new config from URL
 func NewConfigFromURL(URL string) (result *Config, err error) {
+	result = &Config{}
 	err = toolbox.LoadConfigFromUrl(URL, result)
 	return
 }

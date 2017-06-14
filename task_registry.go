@@ -75,3 +75,12 @@ func (t *TaskRegistry) GetAll() []*Task {
 	appendTask(t.History, t.historyMutex, &result)
 	return result
 }
+
+func NewTaskRegistry() *TaskRegistry {
+	return &TaskRegistry{
+		History:      make([]*Task, 0),
+		Active:       make([]*Task, 0),
+		activeMutex:  &sync.Mutex{},
+		historyMutex: &sync.Mutex{},
+	}
+}

@@ -9,8 +9,20 @@ type ObjectMeta struct {
 	RecordSkipped       int
 	Timestamp           time.Time
 	ProcessingTimeInSec int
+	Message             string
 }
 
+func NewObjectMeta(source, target, message string, recordProcessed, recordSkipped int, starTime *time.Time) *ObjectMeta {
+	return &ObjectMeta{
+		Source:source,
+		Target:target,
+		Message:message,
+		RecordProcessed:recordProcessed,
+		RecordSkipped:recordSkipped,
+		Timestamp:           time.Now(),
+		ProcessingTimeInSec: int(time.Now().Unix() - starTime.Unix()),
+	}
+}
 type Meta struct {
 	URL                 string
 	Processed           map[string]*ObjectMeta

@@ -1,7 +1,6 @@
 package etly
 
 import (
-	"fmt"
 	"hash/fnv"
 	"net/url"
 	"path"
@@ -14,19 +13,6 @@ import (
 const timeVariableExpr = "<dateFormat:"
 const modeVarableExpr = "<mod:"
 
-func timeUnitFactor(timeUnit string) (int64, error) {
-	switch strings.ToLower(timeUnit) {
-	case "day":
-		return 24 * int64(time.Hour), nil
-	case "hour":
-		return int64(time.Hour), nil
-	case "min":
-		return int64(time.Minute), nil
-	case "sec":
-		return int64(time.Second), nil
-	}
-	return 0, fmt.Errorf("Unsupported time unit %v", timeUnit)
-}
 
 func expandDateExpressionIfPresent(text string, sourceTime *time.Time) string {
 	for j := 0; j < len(text); j++ {
