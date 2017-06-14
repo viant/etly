@@ -61,7 +61,10 @@ func (s *transferService) Transfer(templateTransfer *Transfer, progress *Transfe
 	}
 	switch strings.ToLower(templateTransfer.Source.Type) {
 	case "url":
-		s.transferDataFromURLSources(transfers, progress)
+		err = s.transferDataFromURLSources(transfers, progress)
+		if err != nil {
+			return err
+		}
 
 	case "datastore":
 		return fmt.Errorf("Unsupported yet source Type %v", templateTransfer.Source.Type)
@@ -202,7 +205,7 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 }
 
 func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress *TransferProgress) ([]*Meta, error) {
-	storageService, err := getStorageService(transfer.Meta)
+	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
 		return nil, err
 	}
@@ -262,8 +265,10 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 		}
 	}
 	var elgibleStorageCountSoFar = 0
+	var alreadyProcess = 0;
 	for _, candidate := range storageTransfer.StorageObjects {
 		if _, found := meta.Processed[candidate.URL()]; found {
+			alreadyProcess++;
 			continue
 		}
 		if filterCompileExpression != nil && ! filterCompileExpression.MatchString(candidate.URL()) {
@@ -289,13 +294,13 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	}
 
 	transfer := storageTransfer.Transfer
-	switch strings.ToLower(transfer.Target.Name) {
+	switch strings.ToLower(transfer.Target.Type) {
 	case "url":
 		return s.transferFromUrlToUrl(storageTransfer, progress)
 	case "datastore":
 		return s.transferFromUrlToDatastore(storageTransfer, progress)
 	}
-	return nil, fmt.Errorf("Unsupported transfer for soruce type: %v", transfer.Source.Type)
+	return nil, fmt.Errorf("Unsupported transfer for target type: %v", transfer.Target.Type)
 }
 
 func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
@@ -399,7 +404,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	}
 	meta.RecentTransfers = int(currentTransfers)
 	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
-	logger.Printf("Completed: [%v] %v files in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
+	logger.Printf("Completed: [%v] %v records in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
 	return meta, s.persistMeta(meta, storageTransfer.Transfer.Meta)
 }
 
@@ -433,7 +438,7 @@ func (s *transferService) transferObject(source storage.Object, transfer *Transf
 		return 0, 0, err
 	}
 	reader = bytes.NewReader(content)
-	reader, err = getEncodingReader(transfer.Source.Encoding, reader)
+	reader, err = getEncodingReader(transfer.Source.Compression, reader)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -500,7 +505,7 @@ outer:
 		atomic.StoreInt32(&progress.ElapsedInSec, int32(time.Now().Unix()-progress.startTime.Unix()))
 	}
 	if len(transformed) > 0 {
-		reader, err := encodeData(transfer.Target.Encoding, []byte(strings.Join(transformed, "\n")))
+		reader, err := encodeData(transfer.Target.Compression, []byte(strings.Join(transformed, "\n")))
 		if err != nil {
 			return 0, 0, err
 		}
