@@ -138,6 +138,9 @@ func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error 
 }
 
 
+
+
+
 func buildVariableMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
 	var result = make(map[string]string)
 	for _, variableExtraction := range variableExtractionRules {
@@ -146,14 +149,16 @@ func buildVariableMap(variableExtractionRules []*VariableExtraction, source stor
 		case "source":
 
 			compiledExpression, err := regexp.Compile(variableExtraction.RegExpr)
+
 			if err != nil {
 				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
 			}
+
+
 			if compiledExpression.MatchString(source.URL()) {
 				matched := compiledExpression.FindStringSubmatch(source.URL())
-				value = matched[0]
+				value = matched[1]
 			}
-
 			result[variableExtraction.Name] = value
 
 		case "record":
@@ -187,13 +192,18 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 		expandedMetaUrl := expandVaiables(transfer.Meta.Name, variables)
 		key := expandedTarget + expandedMetaUrl
 
+
+
 		storageTransfer, found := groupedTransfers[key]
 		if !found {
 			storageTransfer = &StorageObjectTransfer{
 				Transfer:       transfer.New(transfer.Source.Name, expandedTarget, expandedMetaUrl),
 				StorageObjects: make([]storage.Object, 0),
 			}
+
+			groupedTransfers[key] = storageTransfer
 		}
+
 		storageTransfer.StorageObjects = append(storageTransfer.StorageObjects, storageObject)
 
 	}
@@ -214,7 +224,6 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress
 	if err != nil {
 		return nil, err
 	}
-
 	if len(transfer.VariableExtraction) == 0 {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
@@ -235,8 +244,11 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress
 		return nil, err
 	}
 
+
+
 	for _, storageTransfer := range storageTransfers {
 		meta, err := s.transferFromURLSource(storageTransfer, progress)
+
 		if err != nil {
 			return nil, err
 		}
@@ -271,6 +283,9 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 			alreadyProcess++;
 			continue
 		}
+		if candidate.IsFolder() {
+			continue
+		}
 		if filterCompileExpression != nil && ! filterCompileExpression.MatchString(candidate.URL()) {
 			continue
 		}
@@ -292,7 +307,6 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	if len(storageTransfer.StorageObjects) == 0 {
 		return nil, nil
 	}
-
 	transfer := storageTransfer.Transfer
 	switch strings.ToLower(transfer.Target.Type) {
 	case "url":
@@ -315,12 +329,18 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	if err != nil {
 		return nil, err
 	}
+	if parsedUrl.Path  == "" {
+		return nil, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://prodject/datset.table")
+	}
 
-	var resourceFragments = strings.Split(parsedUrl.Path, ".")
+	var resourceFragments = strings.Split(parsedUrl.Path[1:], ".")
 	if len(resourceFragments) != 2 {
 		return nil, fmt.Errorf("Invalid resource , the supported:  bg://prodject/datset.table")
 	}
 	schema, err := SchemaFromFile(target.Schema.Name)
+	if err != nil {
+		return nil, err
+	}
 	var URIs = make([]string, 0)
 	for _, storageObject := range storageTransfer.StorageObjects {
 		URIs = append(URIs, storageObject.URL())
@@ -334,6 +354,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		Schema:     schema,
 		URIs:       URIs,
 	}
+
 	status, jobId, err := s.bigqueryService.Load(job)
 	if err != nil {
 		return nil, err
@@ -341,7 +362,6 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	if len(status.Errors) > 0 {
 		return nil, fmt.Errorf(status.Errors[0].Message)
 	}
-
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
 		URIs = append(URIs, storageObject.URL())

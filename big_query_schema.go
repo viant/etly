@@ -42,7 +42,6 @@ func SchemaFromRaw(content []byte) (bigquery.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	schema := bigquery.Schema{}
 
 	for _, v := range fields {
