@@ -1,13 +1,13 @@
 package etly
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_expandDateExpressionIfPresent(t *testing.T) {
-
 	now := time.Unix(0, 1497277950*1000000000)
 	expanded := expandDateExpressionIfPresent("!!<dateFormat:yyyyMMdd>!! ", &now)
 	assert.Equal(t, "!!20170612!! ", expanded)

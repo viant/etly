@@ -14,8 +14,15 @@ import (
 
 var storageProvider *StorageProvider
 
+const (
+	GoogleStorage = "gs"
+	AmazonStorage = "s3"
+)
+
+type Provide func(config *StorageConfig) (storage.Service, error)
+
 type StorageProvider struct {
-	Registry map[string]func(config *StorageConfig) (storage.Service, error)
+	Registry map[string]Provide
 }
 
 func (p *StorageProvider) Get(namespace string) func(config *StorageConfig) (storage.Service, error) {
@@ -23,24 +30,8 @@ func (p *StorageProvider) Get(namespace string) func(config *StorageConfig) (sto
 }
 
 func init() {
-	NewStorageProvider().Registry["gs"] = func(config *StorageConfig) (storage.Service, error) {
-		credential := option.WithServiceAccountFile(config.Config)
-		return gs.NewService(credential), nil
-	}
-
-	NewStorageProvider().Registry["s3"] = func(config *StorageConfig) (storage.Service, error) {
-		var file = config.Config
-		if !strings.HasPrefix(file, "/") {
-			dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-			file = path.Join(dir, file)
-		}
-		s3config := &aws.Config{}
-		err := toolbox.LoadConfigFromUrl("file://"+file, s3config)
-		if err != nil {
-			return nil, err
-		}
-		return aws.NewService(s3config), nil
-	}
+	NewStorageProvider().Registry[GoogleStorage] = provideGCSStorage
+	NewStorageProvider().Registry[AmazonStorage] = provideAWSStorage
 }
 
 func NewStorageProvider() *StorageProvider {
@@ -48,7 +39,26 @@ func NewStorageProvider() *StorageProvider {
 		return storageProvider
 	}
 	storageProvider = &StorageProvider{
-		Registry: make(map[string]func(config *StorageConfig) (storage.Service, error)),
+		Registry: make(map[string]Provide),
 	}
 	return storageProvider
+}
+
+func provideGCSStorage(config *StorageConfig) (storage.Service, error) {
+	credential := option.WithServiceAccountFile(config.Config)
+	return gs.NewService(credential), nil
+}
+
+func provideAWSStorage(config *StorageConfig) (storage.Service, error) {
+	var file = config.Config
+	if !strings.HasPrefix(file, "/") {
+		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+		file = path.Join(dir, file)
+	}
+	s3config := &aws.Config{}
+	err := toolbox.LoadConfigFromUrl("file://"+file, s3config)
+	if err != nil {
+		return nil, err
+	}
+	return aws.NewService(s3config), nil
 }

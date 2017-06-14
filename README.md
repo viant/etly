@@ -136,26 +136,22 @@ func (f *SourceLogFilter) etlyly(source interface{}) bool {
  -  Add dep to the main func to make sure that init runs
  
  ```go
-
 import (
 	_ "your/dep/path"
 )
-
 ```
 
  
  - Optionally assembly your main func
  
  ```go
-
-
 var (
 	configUrl = flag.String("configUrl", "", "")
 )
 
 func main() {
 	flag.Parse()
-	config, err := etly.NewConfigFromUrl(*configUrl)
+	config, err := etly.NewConfigFromURL(*configUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
