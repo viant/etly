@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"github.com/viant/etly"
 	"log"
 )
@@ -10,15 +9,8 @@ import (
 A sample server implementation for etly framework
 */
 var (
-	configURL string
+	configURL = "file://.../cmd/config.json"
 )
-
-func init() {
-	&configURL = flag.String("config url", "", "path or url to configuration file")
-	if configURL == "" {
-		log.Fatalln("Missing configuration url.")
-	}
-}
 
 func main() {
 	conf, err := etly.NewConfigFromURL(configURL)
