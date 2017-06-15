@@ -7,15 +7,14 @@
         "Type": "url",
         "CredentialFile": "cmd/gs_secret.json",
         "DataFormat": "ndjson",
-        "Compression": "gzip",
-        "FilterRegExp":".*gz$"
+        "FilterRegExp":"^.*?\/\/.*?\/.*?\/.*?\/.*?\/.*json$"
       },
       "Target": {
         "Name": "bq://tech-ops-poc/adrtbbid_us.ad_rtb_bidrequests_$partition_$date",
         "Type": "datastore",
         "CredentialFile": "cmd/gs_secret.json",
         "Schema": {
-          "Name": "file://.../CoreEvent.json"
+          "Name": "file://.../cmd/SampleSchema.json"
         }
       },
       "Meta": {
