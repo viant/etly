@@ -359,7 +359,13 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	if err != nil {
 		return nil, err
 	}
+
+
 	if len(status.Errors) > 0 {
+
+		for i, er := range status.Errors {
+			fmt.Printf("ERR %v -> %v", i, er)
+		}
 		return nil, fmt.Errorf(status.Errors[0].Message)
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
@@ -424,7 +430,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	}
 	meta.RecentTransfers = int(currentTransfers)
 	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
-	logger.Printf("Completed: [%v] %v records in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
+	logger.Printf("Completed: [%v] %v files in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
 	return meta, s.persistMeta(meta, storageTransfer.Transfer.Meta)
 }
 
