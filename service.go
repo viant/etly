@@ -11,7 +11,8 @@ import (
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
-var statusTaskCheckCount = 10
+
+const MaxStatusTaskCount = 10
 
 type Service struct {
 	config           *Config
@@ -24,22 +25,21 @@ type Service struct {
 func (s *Service) Status() string {
 	tasks := s.taskRegistry.GetAll()
 	if len(tasks) == 0 {
-		return "OK"
+		return taskOKStatus
 	}
 
 	for i, task := range tasks {
-		if i > statusTaskCheckCount {
+		if i > MaxStatusTaskCount {
 			break
 		}
 		if task.Status == taskErrorStatus {
 			return taskErrorStatus
 		}
 	}
-	return "OK"
+	return taskOKStatus
 }
 
 func (s *Service) Start() error {
-
 	if !atomic.CompareAndSwapInt32(&s.isRunning, 0, 1) {
 		return errors.New("Service has been already started")
 	}
@@ -72,13 +72,12 @@ func (s *Service) Start() error {
 
 func (s *Service) Run() error {
 	var result error
-
 	for _, transfer := range s.config.Transfers {
 		now := time.Now()
 		if transfer.nextRun == nil || transfer.nextRun.Unix() < now.Unix() {
 			err := transfer.scheduleNextRun(now)
 			if err != nil {
-				logger.Printf("Failed to scedule transfer: %v %v", err, transfer)
+				logger.Printf("Failed to schedule transfer: %v %v", err, transfer)
 				result = err
 				continue
 			}
@@ -118,7 +117,7 @@ func (s *Service) Stop() {
 
 func NewService(config *Config) (*Service, error) {
 
-	transferService := newTransferService(NewBigqueryService(), toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
+	transferService := newTransferService(toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
 	taskRegistry := NewTaskRegistry()
 	var result = &Service{
 		config:           config,

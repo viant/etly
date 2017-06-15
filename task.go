@@ -3,6 +3,7 @@ package etly
 const taskRunningStatus = "RUNNING"
 const taskDoneStatus = "DONE"
 const taskErrorStatus = "ERROR"
+const taskOKStatus = "OK"
 
 //Task represents an ETL task
 type Task struct {

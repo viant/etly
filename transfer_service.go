@@ -15,8 +15,12 @@ import (
 	"net/url"
 )
 
+const (
+	SourceTypeURL = "url"
+	SourceTypeDatastore = "datastore"
+)
+
 type transferService struct {
-	bigqueryService BigqueryService
 	decoderFactory  toolbox.DecoderFactory
 	encoderFactory  toolbox.EncoderFactory
 }
@@ -60,13 +64,12 @@ func (s *transferService) Transfer(templateTransfer *Transfer, progress *Transfe
 		return err
 	}
 	switch strings.ToLower(templateTransfer.Source.Type) {
-	case "url":
+	case SourceTypeURL:
 		err = s.transferDataFromURLSources(transfers, progress)
 		if err != nil {
 			return err
 		}
-
-	case "datastore":
+	case SourceTypeDatastore:
 		return fmt.Errorf("Unsupported yet source Type %v", templateTransfer.Source.Type)
 	default:
 		return fmt.Errorf("Unsupported source Type %v", templateTransfer.Source.Type)
@@ -85,7 +88,6 @@ func (s *transferService) transferDataFromURLSources(transfers []*Transfer, prog
 	return nil
 }
 
-
 func (s *transferService) encodeSource(writer io.Writer, target interface{}) error {
 	return s.encoderFactory.Create(writer).Encode(target)
 }
@@ -93,10 +95,6 @@ func (s *transferService) encodeSource(writer io.Writer, target interface{}) err
 func (s *transferService) decodeTarget(reader io.Reader, target interface{}) error {
 	return s.decoderFactory.Create(reader).Decode(target)
 }
-
-
-
-
 
 func (s *transferService) loadMeta(metaReousrce *Resource) (*Meta, error) {
 	storageService, err := getStorageService(metaReousrce)
@@ -122,8 +120,6 @@ func (s *transferService) loadMeta(metaReousrce *Resource) (*Meta, error) {
 	return result, s.decodeTarget(reader, &result)
 }
 
-
-
 func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error {
 	storageService, err := getStorageService(metaResource)
 	if err != nil {
@@ -136,10 +132,6 @@ func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error 
 	}
 	return storageService.Upload(meta.URL, bytes.NewReader(buffer.Bytes()))
 }
-
-
-
-
 
 func buildVariableMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
 	var result = make(map[string]string)
@@ -238,17 +230,13 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress
 		return []*Meta{meta}, nil
 	}
 	var result = make([]*Meta, 0)
-
 	storageTransfers, err := s.expandTransferWithVariableExpression(transfer, candidates)
 	if err != nil {
 		return nil, err
 	}
-
-
-
+	logger.Printf("Process %v candidate(s) for JobId:%v\n", len(candidates), transfer.Name)
 	for _, storageTransfer := range storageTransfers {
 		meta, err := s.transferFromURLSource(storageTransfer, progress)
-
 		if err != nil {
 			return nil, err
 		}
@@ -309,9 +297,9 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	}
 	transfer := storageTransfer.Transfer
 	switch strings.ToLower(transfer.Target.Type) {
-	case "url":
+	case SourceTypeURL:
 		return s.transferFromUrlToUrl(storageTransfer, progress)
-	case "datastore":
+	case SourceTypeDatastore:
 		return s.transferFromUrlToDatastore(storageTransfer, progress)
 	}
 	return nil, fmt.Errorf("Unsupported transfer for target type: %v", transfer.Target.Type)
@@ -330,12 +318,12 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		return nil, err
 	}
 	if parsedUrl.Path  == "" {
-		return nil, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://prodject/datset.table")
+		return nil, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://project/datset.table")
 	}
 
 	var resourceFragments = strings.Split(parsedUrl.Path[1:], ".")
 	if len(resourceFragments) != 2 {
-		return nil, fmt.Errorf("Invalid resource , the supported:  bg://prodject/datset.table")
+		return nil, fmt.Errorf("Invalid resource , the supported:  bg://project/datset.table")
 	}
 	schema, err := SchemaFromFile(target.Schema.Name)
 	if err != nil {
@@ -355,7 +343,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		URIs:       URIs,
 	}
 
-	status, jobId, err := s.bigqueryService.Load(job)
+	status, jobId, err := NewBigqueryService().Load(job)
 	if err != nil {
 		return nil, err
 	}
@@ -576,11 +564,10 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 	return result, nil
 }
 
-func newTransferService(bigqueryService BigqueryService,
+func newTransferService(
 	decoderFactory toolbox.DecoderFactory,
 	encoderFactory toolbox.EncoderFactory) *transferService {
 	return &transferService{
-		bigqueryService: bigqueryService,
 		decoderFactory:  decoderFactory,
 		encoderFactory:  encoderFactory,
 	}
