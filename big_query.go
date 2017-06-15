@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/option"
 	"strconv"
 	"time"
+	"strings"
 )
 
 type BigqueryService interface {
@@ -33,6 +34,8 @@ const (
 	// e.g key1--val1__key2--val2__key3--val3__.....
 	KeyValueSeparator = "--"
 	PairSeparator     = "__"
+
+	ErrorDuplicate    = "Error 409"
 )
 
 func NewBigqueryService() BigqueryService {
@@ -61,6 +64,12 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	}
 	ref.SourceFormat = bigquery.JSON
 	dataset := client.DatasetInProject(loadJob.ProjectId, loadJob.DatasetId)
+	if err := dataset.Create(ctx); err != nil {
+		// Create dataset if it does exist, otherwise ignore duplicate error
+		if !strings.Contains(err.Error(), ErrorDuplicate) {
+			return nil, "", err
+		}
+	}
 	loader := dataset.Table(loadJob.TableId).LoaderFrom(ref)
 	loader.CreateDisposition = bigquery.CreateIfNeeded
 	loader.WriteDisposition = bigquery.WriteAppend

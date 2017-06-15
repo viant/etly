@@ -289,6 +289,7 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	if err != nil {
 		return nil, err
 	}
+	logger.Printf("Process %v files for JobId:%v\n", len(storageTransfer.StorageObjects), storageTransfer.Transfer.Name)
 	if len(storageTransfer.StorageObjects) == 0 {
 		return nil, nil
 	}
