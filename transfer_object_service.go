@@ -70,11 +70,15 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	if transfer.Source.DataFormat == "ndjson" {
 		var err = s.transferObjectFromNewLineDelimiteredJson(content, transfer, task)
 		task.Progress.FileProcessed++
-		return &TransferObjectResponse{
+		var response = &TransferObjectResponse{
 			RecordProcessed: int(task.Progress.RecordProcessed),
 			RecordSkipped:   int(task.Progress.RecordSkipped),
-			Error:           fmt.Sprintf("%v", err),
 		}
+		if err != nil {
+			response.Error = fmt.Sprintf("%v", err)
+		}
+		return response
+
 	}
 	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
 
