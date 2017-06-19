@@ -469,6 +469,7 @@ func (s *transferService) transferObject(source storage.Object, transfer *Transf
 	atomic.AddInt32(&task.Progress.RecordProcessed, int32(response.RecordProcessed))
 	atomic.AddInt32(&task.Progress.RecordSkipped, int32(response.RecordProcessed))
 	atomic.AddInt32(&task.Progress.FileProcessed, 1)
+	task.UpdateElapsed()
 	return response.RecordProcessed, response.RecordSkipped, err
 
 }
