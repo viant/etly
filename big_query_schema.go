@@ -1,12 +1,11 @@
 package etly
 
-
 import (
 	"cloud.google.com/go/bigquery"
 	"encoding/json"
+	"github.com/viant/toolbox"
 	"io/ioutil"
 	"strings"
-	"github.com/viant/toolbox"
 )
 
 // Custom bigquery schema that is compatible with current Adserver implementation
@@ -19,7 +18,7 @@ type BigqueryField struct {
 
 // Read schema from a file
 func SchemaFromFile(URL string) (bigquery.Schema, error) {
-	reader, _,  err := toolbox.OpenReaderFromURL(URL)
+	reader, _, err := toolbox.OpenReaderFromURL(URL)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +32,6 @@ func SchemaFromFile(URL string) (bigquery.Schema, error) {
 	}
 	return SchemaFromRaw(content)
 }
-
 
 // Read schema from raw slice of bytes
 func SchemaFromRaw(content []byte) (bigquery.Schema, error) {

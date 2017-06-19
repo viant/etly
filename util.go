@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"github.com/viant/toolbox"
+	"io"
 )
 
 const timeVariableExpr = "<dateFormat:"
 const modeVarableExpr = "<mod:"
 
+var jsonDecoderFactory = toolbox.NewJSONDecoderFactory()
+var jsonEncoderFactory = toolbox.NewJSONEncoderFactory()
 
 func expandDateExpressionIfPresent(text string, sourceTime *time.Time) string {
 	for j := 0; j < len(text); j++ {
@@ -118,4 +121,12 @@ func hash(text string) int {
 		return result * -1
 	}
 	return result
+}
+
+func decodeJsonTarget(reader io.Reader, target interface{}) error {
+	return jsonDecoderFactory.Create(reader).Decode(target)
+}
+
+func encodeJsonSource(writer io.Writer, target interface{}) error {
+	return jsonEncoderFactory.Create(writer).Encode(target)
 }

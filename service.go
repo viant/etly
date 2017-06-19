@@ -15,11 +15,13 @@ var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
 const MaxStatusTaskCount = 10
 
 type Service struct {
-	config           *Config
-	isRunning        int32
-	stopNotification chan bool
-	transferService  *transferService
-	taskRegistry     *TaskRegistry
+	config                *ServerConfig
+	transferConfig        *TransferConfig
+	isRunning             int32
+	stopNotification      chan bool
+	transferService       *transferService
+	transferObjectService TransferObjectService
+	taskRegistry          *TaskRegistry
 }
 
 func (s *Service) Status() string {
@@ -56,7 +58,7 @@ func (s *Service) Start() error {
 			case <-time.After(sleepDuration):
 				err := s.run()
 				if err != nil {
-					logger.Printf("Failed to run task %v", err)
+					logger.Printf("Failed to run status %v", err)
 				}
 			}
 		}
@@ -66,23 +68,30 @@ func (s *Service) Start() error {
 
 func (s *Service) run() error {
 	var result error
-	for _, transfer := range s.config.Transfers {
-		now := time.Now()
-		if transfer.nextRun == nil || transfer.nextRun.Unix() < now.Unix() {
-			err := transfer.scheduleNextRun(now)
-			if err != nil {
-				logger.Printf("Failed to schedule transfer: %v %v", err, transfer)
-				result = err
-				continue
+	if s.transferConfig == nil || len(s.transferConfig.Transfers) == 0 {
+		return result
+	}
+	for _, transfer := range s.transferConfig.Transfers {
+		go func(transfer *Transfer) {
+			now := time.Now()
+			if (transfer.nextRun == nil || transfer.nextRun.Unix() < now.Unix()) && !transfer.running {
+				transfer.running = true
+				defer transfer.reset()
+				err := transfer.scheduleNextRun(now)
+				if err != nil {
+					logger.Printf("Failed to schedule Transfer: %v %v", err, transfer)
+					result = err
+					return
+				}
+				transferTask := NewTransferTask(transfer)
+				s.taskRegistry.Register(transferTask.Task)
+				err = s.transferService.Run(transferTask)
+				if err != nil {
+					logger.Printf("Failed to Transfer: %v %v", err, transfer)
+					result = err
+				}
 			}
-			task := NewTransferTask(transfer)
-			s.taskRegistry.Register(task.Task)
-			err = s.transferService.Run(task)
-			if err != nil {
-				logger.Printf("Failed to transfer: %v %v", err, transfer)
-				result = err
-			}
-		}
+		}(transfer)
 	}
 	return result
 }
@@ -105,18 +114,20 @@ func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 
 func (s *Service) GetErrors() []*ObjectMeta {
 	corruptedFiles := make([]*ObjectMeta, 0)
-	for _, transfer := range s.config.Transfers {
-		meta, err  := s.transferService.LoadMeta(transfer.Meta)
-		if err != nil {
-			logger.Printf("Failed to load Meta file: %v %v", transfer, err)
-			continue
-		}
-		for _, processedFile := range meta.Processed {
-			if processedFile.Error != "" {
-				corruptedFiles = append(corruptedFiles, processedFile)
-			}
-		}
-	}
+	//THIS WOULD NOT WORK
+
+	//for _, transfer := range s.config.Transfers {
+	//	meta, err  := s.transferService.LoadMeta(transfer.Meta)
+	//	if err != nil {
+	//		logger.Printf("Failed to load Meta file: %v %v", transfer, err)
+	//		continue
+	//	}
+	//	for _, processedFile := range meta.Processed {
+	//		if processedFile.Error != "" {
+	//			corruptedFiles = append(corruptedFiles, processedFile)
+	//		}
+	//	}
+	//}
 	return corruptedFiles
 }
 
@@ -125,15 +136,23 @@ func (s *Service) Stop() {
 	s.stopNotification <- true
 }
 
-func NewService(config *Config) (*Service, error) {
-	transferService := newTransferService(toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
+func NewService(config *ServerConfig, transferConfig *TransferConfig) (*Service, error) {
 	taskRegistry := NewTaskRegistry()
+	var transferObjectService TransferObjectService
+	if len(config.Cluster) == 0 {
+		transferObjectService = newtransferObjectService(taskRegistry)
+	} else {
+		transferObjectService = newTransferObjectServiceClient(config.Cluster)
+	}
+	transferService := newTransferService(transferObjectService)
 	var result = &Service{
-		config:           config,
-		isRunning:        0,
-		stopNotification: make(chan bool, 1),
-		transferService:  transferService,
-		taskRegistry:     taskRegistry,
+		config:                config,
+		transferConfig:        transferConfig,
+		isRunning:             0,
+		stopNotification:      make(chan bool, 1),
+		transferService:       transferService,
+		taskRegistry:          taskRegistry,
+		transferObjectService: transferObjectService,
 	}
 	return result, nil
 }

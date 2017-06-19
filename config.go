@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-//Transfer represents transfer rule
+//Transfer represents Transfer rule
 type Transfer struct {
 	Name string
 
@@ -26,6 +26,12 @@ type Transfer struct {
 	VariableExtraction []*VariableExtraction
 
 	nextRun *time.Time
+	running bool
+}
+
+//TransferConfig represents TransferConfig
+type TransferConfig struct {
+	Transfers []*Transfer
 }
 
 type Resource struct {
@@ -140,8 +146,12 @@ func (t *Transfer) scheduleNextRun(now time.Time) error {
 	return nil
 }
 
+func (t *Transfer) reset() {
+	t.running = false
+}
+
 func (t *Transfer) String() string {
-	return "[id: " + t.Name + ", Source: " + t.Source.Name + ", Target: " + t.Target.Name + "]"
+	return "[id: " + t.Name + ", SourceURL: " + t.Source.Name + ", Target: " + t.Target.Name + "]"
 }
 
 func (t *Transfer) New(source, target, MetaURL string) *Transfer {
@@ -152,7 +162,7 @@ func (t *Transfer) New(source, target, MetaURL string) *Transfer {
 	return result
 }
 
-//Clone creates a copy of the transfer
+//Clone creates a copy of the Transfer
 func (t *Transfer) Clone() *Transfer {
 	return &Transfer{
 		Name:                 t.Name,
@@ -183,15 +193,27 @@ type VariableExtraction struct {
 	Source  string // sourceUrl, record
 }
 
-//Config ETL config
-type Config struct {
-	Transfers []*Transfer
-	Port      int
+type Host struct {
+	Server string
+	Port   int
+}
+
+//ServerConfig ETL config
+type ServerConfig struct {
+	Port    int
+	Cluster []*Host
 }
 
 //NewConfigFromURL creates a new config from URL
-func NewConfigFromURL(URL string) (result *Config, err error) {
-	result = &Config{}
+func NewServerConfigFromURL(URL string) (result *ServerConfig, err error) {
+	result = &ServerConfig{}
+	err = toolbox.LoadConfigFromUrl(URL, result)
+	return
+}
+
+//NewConfigFromURL creates a new config from URL
+func NewTransferConfigFromURL(URL string) (result *TransferConfig, err error) {
+	result = &TransferConfig{}
 	err = toolbox.LoadConfigFromUrl(URL, result)
 	return
 }

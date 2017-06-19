@@ -2,18 +2,16 @@ package etly
 
 import (
 	"bytes"
+	"compress/gzip"
+	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
-	"net/url"
-	"compress/gzip"
 )
 
 const (
@@ -21,9 +19,22 @@ const (
 	SourceTypeDatastore = "datastore"
 )
 
+var regExpCache = make(map[string]*regexp.Regexp)
+
+func compileRegExpr(expr string) (*regexp.Regexp, error) {
+	if result, found := regExpCache[expr]; found {
+		return result, nil
+	}
+	compiledExpression, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	regExpCache[expr] = compiledExpression
+	return compiledExpression, nil
+}
+
 type transferService struct {
-	decoderFactory toolbox.DecoderFactory
-	encoderFactory toolbox.EncoderFactory
+	transferObjectService TransferObjectService
 }
 
 func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
@@ -56,17 +67,18 @@ func (s *transferService) Run(task *TransferTask) (err error) {
 		}
 
 	}(err)
-	return s.Transfer(task.Transfer, task.Progress)
+	return s.Transfer(task)
 }
 
-func (s *transferService) Transfer(templateTransfer *Transfer, progress *TransferProgress) error {
+func (s *transferService) Transfer(task *TransferTask) error {
+	templateTransfer := task.Transfer
 	transfers, err := s.getTransferForTimeWindow(templateTransfer)
 	if err != nil {
 		return err
 	}
 	switch strings.ToLower(templateTransfer.Source.Type) {
 	case SourceTypeURL:
-		err = s.transferDataFromURLSources(transfers, progress)
+		err = s.transferDataFromURLSources(transfers, task)
 		if err != nil {
 			return err
 		}
@@ -79,22 +91,14 @@ func (s *transferService) Transfer(templateTransfer *Transfer, progress *Transfe
 	return nil
 }
 
-func (s *transferService) transferDataFromURLSources(transfers []*Transfer, progress *TransferProgress) error {
+func (s *transferService) transferDataFromURLSources(transfers []*Transfer, task *TransferTask) error {
 	for _, transfer := range transfers {
-		_, err := s.transferDataFromURLSource(transfer, progress)
+		_, err := s.transferDataFromURLSource(transfer, task)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func (s *transferService) encodeSource(writer io.Writer, target interface{}) error {
-	return s.encoderFactory.Create(writer).Encode(target)
-}
-
-func (s *transferService) decodeTarget(reader io.Reader, target interface{}) error {
-	return s.decoderFactory.Create(reader).Decode(target)
 }
 
 func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
@@ -118,7 +122,7 @@ func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
 		return nil, err
 	}
 	var result = &Meta{}
-	return result, s.decodeTarget(reader, &result)
+	return result, decodeJsonTarget(reader, &result)
 }
 
 func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error {
@@ -127,7 +131,7 @@ func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error 
 		return err
 	}
 	buffer := new(bytes.Buffer)
-	err = s.encoderFactory.Create(buffer).Encode(meta)
+	err = encodeJsonSource(buffer, meta)
 	if err != nil {
 		return err
 	}
@@ -141,7 +145,7 @@ func buildVariableMap(variableExtractionRules []*VariableExtraction, source stor
 		switch variableExtraction.Source {
 		case "source":
 
-			compiledExpression, err := regexp.Compile(variableExtraction.RegExpr)
+			compiledExpression, err := compileRegExpr(variableExtraction.RegExpr)
 
 			if err != nil {
 				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
@@ -204,7 +208,7 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 	return result, nil
 }
 
-func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress *TransferProgress) ([]*Meta, error) {
+func (s *transferService) transferDataFromURLSource(transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
 	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
 		return nil, err
@@ -215,11 +219,11 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress
 		return nil, err
 	}
 	if len(transfer.VariableExtraction) == 0 {
-		logger.Printf("Process %v candidate(s) for JobId:%v\n", len(candidates), transfer.Name)
+
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
 			StorageObjects: candidates,
-		}, progress)
+		}, task)
 		if err != nil {
 			return nil, err
 		}
@@ -228,24 +232,30 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, progress
 		}
 		return []*Meta{meta}, nil
 	}
-	var result = make([]*Meta, 0)
+	result = make([]*Meta, 0)
 	storageTransfers, err := s.expandTransferWithVariableExpression(transfer, candidates)
 	if err != nil {
 		return nil, err
 	}
-	logger.Printf("Process %v candidate(s) for JobId:%v\n", len(candidates), transfer.Name)
+	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(storageTransfers))
 	for _, storageTransfer := range storageTransfers {
-		meta, err := s.transferFromURLSource(storageTransfer, progress)
-		if err != nil {
-			return nil, err
-		}
-		if meta != nil {
-			result = append(result, meta)
-		}
+		go func(storageTransfer *StorageObjectTransfer) {
+			limiter.Acquire()
+			defer limiter.Done()
+			meta, e := s.transferFromURLSource(storageTransfer, task)
+			if e != nil {
+				err = e
+			}
+			limiter.Mutex.Lock()
+			defer limiter.Mutex.Unlock()
+			if meta != nil {
+				result = append(result, meta)
+			}
+
+		}(storageTransfer)
 	}
-
-	return result, nil
-
+	limiter.Wait()
+	return result, err
 }
 
 func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTransfer) error {
@@ -258,14 +268,16 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 	var filterRegExp = storageTransfer.Transfer.Source.FilterRegExp
 	var filterCompileExpression *regexp.Regexp
 	if filterRegExp != "" {
-		filterCompileExpression, err = regexp.Compile(storageTransfer.Transfer.Source.FilterRegExp)
+		filterCompileExpression, err = compileRegExpr(storageTransfer.Transfer.Source.FilterRegExp)
 		if err != nil {
 			return fmt.Errorf("Failed to filter storage object %v %v", filterRegExp, err)
 		}
 	}
 	var elgibleStorageCountSoFar = 0
 	var alreadyProcess = 0
+
 	for _, candidate := range storageTransfer.StorageObjects {
+
 		if _, found := meta.Processed[candidate.URL()]; found {
 			alreadyProcess++
 			continue
@@ -281,12 +293,13 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 		}
 		filteredObjects = append(filteredObjects, candidate)
 		elgibleStorageCountSoFar++
+
 	}
 	storageTransfer.StorageObjects = filteredObjects
 	return nil
 }
 
-func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
 	err := s.filterStorageObjects(storageTransfer)
 	if err != nil {
 		return nil, err
@@ -298,14 +311,14 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	transfer := storageTransfer.Transfer
 	switch strings.ToLower(transfer.Target.Type) {
 	case SourceTypeURL:
-		return s.transferFromUrlToUrl(storageTransfer, progress)
+		return s.transferFromUrlToUrl(storageTransfer, task)
 	case SourceTypeDatastore:
-		return s.transferFromUrlToDatastore(storageTransfer, progress)
+		return s.transferFromUrlToDatastore(storageTransfer, task)
 	}
-	return nil, fmt.Errorf("Unsupported transfer for target type: %v", transfer.Target.Type)
+	return nil, fmt.Errorf("Unsupported Transfer for target type: %v", transfer.Target.Type)
 }
 
-func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
 	meta, err := s.LoadMeta(storageTransfer.Transfer.Meta)
 	if err != nil {
 		return nil, err
@@ -332,8 +345,8 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	var URIs = make([]string, 0)
 	for _, storageObject := range storageTransfer.StorageObjects {
 		URIs = append(URIs, storageObject.URL())
+		atomic.AddInt32(&task.Progress.FileProcessed, 1)
 	}
-
 	job := &LoadJob{
 		Credential: storageTransfer.Transfer.Target.CredentialFile,
 		TableId:    resourceFragments[1],
@@ -342,14 +355,13 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		Schema:     schema,
 		URIs:       URIs,
 	}
-
+	task.UpdateElapsed()
 	status, jobId, err := NewBigqueryService().Load(job)
 	if err != nil {
 		return nil, err
 	}
-
+	task.UpdateElapsed()
 	if len(status.Errors) > 0 {
-
 		for i, er := range status.Errors {
 			fmt.Printf("ERR %v -> %v", i, er)
 		}
@@ -373,7 +385,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	return meta, nil
 }
 
-func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, progress *TransferProgress) (*Meta, error) {
+func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
 	transfer := storageTransfer.Transfer
 	candidates := storageTransfer.StorageObjects
 	meta, err := s.LoadMeta(transfer.Meta)
@@ -389,7 +401,9 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 		logger.Println("No candidates no process")
 		return nil, nil
 	}
+
 	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(candidates))
+
 	var currentTransfers int32 = 0
 	for _, candidate := range candidates {
 
@@ -405,19 +419,18 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			}
 
 			startTime := time.Now()
-			recordsProcessed, recordSkipped, e := s.transferObject(candidate, targetTransfer, progress)
+			recordsProcessed, recordSkipped, e := s.transferObject(candidate, targetTransfer, task)
 
 			var errMessage string
-			switch e {
-			case gzip.ErrChecksum:
+			if e != nil {
 				errMessage = e.Error()
-			case nil:
-				errMessage = ""
-			default:
-				logger.Printf("Failed to targetTransfer: %v\n", e)
-				err = e
-				errMessage = e.Error()
+				if e != gzip.ErrChecksum {
+					logger.Printf("Failed to targetTransfer: %v %T\n", e, e)
+					err = e
+					return
+				}
 			}
+
 			objectMeta := NewObjectMeta(targetTransfer.Source.Name,
 				candidate.URL(),
 				"",
@@ -429,6 +442,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			limiter.Mutex.Lock()
 			defer limiter.Mutex.Unlock()
 			meta.Processed[candidate.URL()] = objectMeta
+
 		}(candidate, transfer)
 	}
 	limiter.Wait()
@@ -441,117 +455,22 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	return meta, s.persistMeta(meta, storageTransfer.Transfer.Meta)
 }
 
-func (s *transferService) transferObject(source storage.Object, transfer *Transfer, progress *TransferProgress) (int, int, error) {
-	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
-	if !hasProvider {
-		return 0, 0, fmt.Errorf("Failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target)
+func (s *transferService) transferObject(source storage.Object, transfer *Transfer, task *TransferTask) (int, int, error) {
+	request := &TransferObjectRequest{
+		SourceURL: source.URL(),
+		Transfer:  transfer,
+		TaskId:    task.Id + "--transferObject",
 	}
+	var response = s.transferObjectService.Transfer(request)
+	var err error
+	if response.Error != "" {
+		err = errors.New(response.Error)
+	}
+	atomic.AddInt32(&task.Progress.RecordProcessed, int32(response.RecordProcessed))
+	atomic.AddInt32(&task.Progress.RecordSkipped, int32(response.RecordProcessed))
+	atomic.AddInt32(&task.Progress.FileProcessed, 1)
+	return response.RecordProcessed, response.RecordSkipped, err
 
-	_, hasTransformer := NewTransformerRegistry().registry[transfer.Transformer]
-	if !hasTransformer {
-		return 0, 0, fmt.Errorf("Failed to lookup transformer %v: %v -> %v", transfer.Transformer, transfer.Source.Name, transfer.Target)
-	}
-
-	defer func() {
-		atomic.AddInt32(&progress.FileProcessed, 1)
-	}()
-
-	storageService, err := getStorageService(transfer.Source.Resource)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	reader, err := storageService.Download(source)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	content, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return 0, 0, err
-	}
-	reader = bytes.NewReader(content)
-	reader, err = getEncodingReader(transfer.Source.Compression, reader)
-	if err != nil {
-		return 0, 0, err
-	}
-	content, err = ioutil.ReadAll(reader)
-	if err != nil {
-		return 0, 0, err
-	}
-	if transfer.Source.DataFormat == "ndjson" {
-		return s.transferObjectFromNewLineDelimiteredJson(content, transfer, progress)
-	}
-	return 0, 0, fmt.Errorf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target)
-}
-
-func (s *transferService) transferObjectFromNewLineDelimiteredJson(source []byte, transfer *Transfer, progress *TransferProgress) (int, int, error) {
-	provider := NewProviderRegistry().registry[transfer.Source.DataType]
-	transformer := NewTransformerRegistry().registry[transfer.Transformer]
-
-	var lines = strings.Split(string(source), "\n")
-	predicate, _ := NewFilterRegistry().registry[transfer.Filter]
-	var filtered = 0
-	var transformed = make([]string, 0)
-outer:
-	for i, line := range lines {
-		if len(line) == 0 {
-			continue
-		}
-		if len(transfer.Source.DataTypeMatch) > 0 {
-			for _, sourceData := range transfer.Source.DataTypeMatch {
-				if strings.Contains(line, sourceData.MatchingFragment) {
-					if sourceData.DataType == "" {
-						continue outer
-					}
-					provider = NewProviderRegistry().registry[sourceData.DataType]
-					if provider == nil {
-						return 0, 0, fmt.Errorf("Failed to lookup provider for match: %v %v", sourceData.MatchingFragment, sourceData.DataType)
-					}
-				}
-			}
-		}
-
-		var source = provider()
-		err := s.decodeTarget(bytes.NewReader([]byte(line)), source)
-		if err != nil {
-			return 0, 0, fmt.Errorf("Failed to decode json: [%v] %v %v", i, err, line)
-		}
-
-		if predicate == nil || predicate.Apply(source) {
-			target, err := transformer(source)
-			if err != nil {
-				return 0, 0, fmt.Errorf("Failed to transform %v", err)
-			}
-			buf := new(bytes.Buffer)
-			err = s.encodeSource(buf, target)
-			if err != nil {
-				return 0, 0, err
-			}
-			tranformedObject := strings.Replace(string(buf.Bytes()), "\n", "", buf.Len())
-			transformed = append(transformed, tranformedObject)
-			atomic.AddInt32(&progress.RecordProcessed, 1)
-		} else {
-			atomic.AddInt32(&progress.RecordSkipped, 1)
-			filtered++
-		}
-		atomic.StoreInt32(&progress.ElapsedInSec, int32(time.Now().Unix()-progress.startTime.Unix()))
-	}
-	if len(transformed) > 0 {
-		reader, err := encodeData(transfer.Target.Compression, []byte(strings.Join(transformed, "\n")))
-		if err != nil {
-			return 0, 0, err
-		}
-		storageService, err := getStorageService(transfer.Target.Resource)
-		if err != nil {
-			return 0, 0, err
-		}
-		err = storageService.Upload(transfer.Target.Name, reader)
-		if err != nil {
-			return 0, 0, fmt.Errorf("Failed to upload: %v %v", transfer.Target, err)
-		}
-	}
-	return len(transformed), filtered, nil
 }
 
 func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Transfer, error) {
@@ -589,11 +508,8 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 	return result, nil
 }
 
-func newTransferService(
-	decoderFactory toolbox.DecoderFactory,
-	encoderFactory toolbox.EncoderFactory) *transferService {
+func newTransferService(transferObjectService TransferObjectService) *transferService {
 	return &transferService{
-		decoderFactory: decoderFactory,
-		encoderFactory: encoderFactory,
+		transferObjectService: transferObjectService,
 	}
 }

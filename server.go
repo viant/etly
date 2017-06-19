@@ -10,7 +10,7 @@ import (
 const uriBasePath = "/etly/"
 
 type Server struct {
-	config *Config
+	config  *ServerConfig
 	Service *Service
 }
 
@@ -25,8 +25,8 @@ func (s *Server) Start() (err error) {
 	return nil
 }
 
-func NewServer(config *Config) (*Server, error) {
-	service, err := NewService(config)
+func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, error) {
+	service, err := NewService(config, transferConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +50,15 @@ func NewServer(config *Config) (*Server, error) {
 		},
 		toolbox.ServiceRouting{
 			HTTPMethod: "GET",
-			URI: uriBasePath + "errors",
-			Handler: service.GetErrors,
+			URI:        uriBasePath + "errors",
+			Handler:    service.GetErrors,
 			Parameters: []string{},
+		},
+		toolbox.ServiceRouting{
+			HTTPMethod: "POST",
+			URI:        uriBasePath + "transfer",
+			Handler:    service.transferObjectService.Transfer,
+			Parameters: []string{"request"},
 		},
 	)
 	http.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {

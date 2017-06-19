@@ -86,7 +86,7 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 // key1--val1__key2--val2__key3--val3__.....
 func (sv *gbqService) generateJobId(kv ...string) string {
 	var buffer bytes.Buffer
-	for i := 0; i < len(kv); i+=2 {
+	for i := 0; i < len(kv); i += 2 {
 		buffer.WriteString(kv[i])
 		buffer.WriteString(KeyValueSeparator)
 		if i+1 < len(kv) {
