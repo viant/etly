@@ -48,6 +48,12 @@ func NewServer(config *Config) (*Server, error) {
 			Handler:    service.Status,
 			Parameters: []string{},
 		},
+		toolbox.ServiceRouting{
+			HTTPMethod: "GET",
+			URI: uriBasePath + "errors",
+			Handler: service.GetErrors,
+			Parameters: []string{},
+		},
 	)
 	http.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {
 		err := router.Route(writer, reader)

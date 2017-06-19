@@ -27,7 +27,6 @@ func (s *Service) Status() string {
 	if len(tasks) == 0 {
 		return taskOKStatus
 	}
-
 	for i, task := range tasks {
 		if i > MaxStatusTaskCount {
 			break
@@ -51,16 +50,11 @@ func (s *Service) Start() error {
 			if isRunning == 0 {
 				break
 			}
-			err := s.Run()
-			if err != nil {
-				logger.Printf("Failed to run task %v", err)
-			}
-
 			select {
 			case <-s.stopNotification:
 				break
 			case <-time.After(sleepDuration):
-				err := s.Run()
+				err := s.run()
 				if err != nil {
 					logger.Printf("Failed to run task %v", err)
 				}
@@ -70,7 +64,7 @@ func (s *Service) Start() error {
 	return nil
 }
 
-func (s *Service) Run() error {
+func (s *Service) run() error {
 	var result error
 	for _, transfer := range s.config.Transfers {
 		now := time.Now()
@@ -107,7 +101,23 @@ func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 		limit = len(result)
 	}
 	return result[offset:limit]
+}
 
+func (s *Service) GetErrors() []*ObjectMeta {
+	corruptedFiles := make([]*ObjectMeta, 0)
+	for _, transfer := range s.config.Transfers {
+		meta, err  := s.transferService.LoadMeta(transfer.Meta)
+		if err != nil {
+			logger.Printf("Failed to load Meta file: %v %v", transfer, err)
+			continue
+		}
+		for _, processedFile := range meta.Processed {
+			if processedFile.Error != "" {
+				corruptedFiles = append(corruptedFiles, processedFile)
+			}
+		}
+	}
+	return corruptedFiles
 }
 
 func (s *Service) Stop() {
@@ -116,7 +126,6 @@ func (s *Service) Stop() {
 }
 
 func NewService(config *Config) (*Service, error) {
-
 	transferService := newTransferService(toolbox.NewJSONDecoderFactory(), toolbox.NewJSONEncoderFactory())
 	taskRegistry := NewTaskRegistry()
 	var result = &Service{
