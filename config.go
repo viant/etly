@@ -1,10 +1,10 @@
 package etly
 
 import (
-	"time"
+	"fmt"
 	"github.com/viant/toolbox"
 	"strings"
-	"fmt"
+	"time"
 )
 
 //Transfer represents transfer rule
@@ -71,10 +71,9 @@ func (r *StructuredResource) Clone() *StructuredResource {
 
 type Source struct {
 	*StructuredResource
-	FilterRegExp     string
+	FilterRegExp  string
 	DataTypeMatch []*DataTypeMatch
 }
-
 
 func (r *Source) Clone() *Source {
 	if r == nil {
@@ -82,7 +81,7 @@ func (r *Source) Clone() *Source {
 	}
 	var result = &Source{
 		StructuredResource: r.StructuredResource.Clone(),
-		FilterRegExp:          r.FilterRegExp,
+		FilterRegExp:       r.FilterRegExp,
 		DataTypeMatch:      r.DataTypeMatch,
 	}
 	return result
@@ -128,7 +127,7 @@ func (d *Duration) Get() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	return  timeUnit * time.Duration(d.Duration), nil
+	return timeUnit * time.Duration(d.Duration), nil
 }
 
 func (t *Transfer) scheduleNextRun(now time.Time) error {
@@ -146,7 +145,7 @@ func (t *Transfer) String() string {
 }
 
 func (t *Transfer) New(source, target, MetaURL string) *Transfer {
- 	var result = t.Clone()
+	var result = t.Clone()
 	result.Source.Name = source
 	result.Target.Name = target
 	result.Meta.Name = MetaURL
@@ -176,7 +175,6 @@ type DataTypeMatch struct {
 	DataType         string
 }
 
-
 //VariableExtraction represents variable extraction rule
 type VariableExtraction struct {
 	Name    string
@@ -187,8 +185,8 @@ type VariableExtraction struct {
 
 //Config ETL config
 type Config struct {
-	Transfers       []*Transfer
-	Port            int
+	Transfers []*Transfer
+	Port      int
 }
 
 //NewConfigFromURL creates a new config from URL
