@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/viant/toolbox"
 	"io"
+
+	"github.com/viant/toolbox"
 )
 
 const timeVariableExpr = "<dateFormat:"
@@ -123,10 +124,10 @@ func hash(text string) int {
 	return result
 }
 
-func decodeJsonTarget(reader io.Reader, target interface{}) error {
+func decodeJSONTarget(reader io.Reader, target interface{}) error {
 	return jsonDecoderFactory.Create(reader).Decode(target)
 }
 
-func encodeJsonSource(writer io.Writer, target interface{}) error {
+func encodeJSONSource(writer io.Writer, target interface{}) error {
 	return jsonEncoderFactory.Create(writer).Encode(target)
 }

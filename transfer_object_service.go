@@ -42,7 +42,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 
 	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get strage service: %v", err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get storage service: %v", err))
 	}
 
 	source, err := storageService.StorageObject(sourceURL)
@@ -112,7 +112,7 @@ outer:
 			}
 		}
 		var source = provider()
-		err := decodeJsonTarget(bytes.NewReader([]byte(line)), source)
+		err := decodeJSONTarget(bytes.NewReader([]byte(line)), source)
 		if err != nil {
 			return fmt.Errorf("Failed to decode json: [%v] %v %v", i, err, line)
 		}
@@ -123,7 +123,7 @@ outer:
 				return fmt.Errorf("Failed to transform %v", err)
 			}
 			buf := new(bytes.Buffer)
-			err = encodeJsonSource(buf, target)
+			err = encodeJSONSource(buf, target)
 			if err != nil {
 				return err
 			}

@@ -2,9 +2,10 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
 	"strings"
 	"time"
+
+	"github.com/viant/toolbox"
 )
 
 //Transfer represents Transfer rule
@@ -193,6 +194,7 @@ type VariableExtraction struct {
 	Source  string // sourceUrl, record
 }
 
+// Host defines a host construct with IP/DNS and port
 type Host struct {
 	Server string
 	Port   int
@@ -204,14 +206,14 @@ type ServerConfig struct {
 	Cluster []*Host
 }
 
-//NewConfigFromURL creates a new config from URL
+//NewServerConfigFromURL creates a new config from URL
 func NewServerConfigFromURL(URL string) (result *ServerConfig, err error) {
 	result = &ServerConfig{}
 	err = toolbox.LoadConfigFromUrl(URL, result)
 	return
 }
 
-//NewConfigFromURL creates a new config from URL
+//NewTransferConfigFromURL creates a new config from URL
 func NewTransferConfigFromURL(URL string) (result *TransferConfig, err error) {
 	result = &TransferConfig{}
 	err = toolbox.LoadConfigFromUrl(URL, result)

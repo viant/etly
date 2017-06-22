@@ -5,13 +5,14 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
 )
 
 const (
@@ -122,7 +123,7 @@ func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
 		return nil, err
 	}
 	var result = &Meta{}
-	return result, decodeJsonTarget(reader, &result)
+	return result, decodeJSONTarget(reader, &result)
 }
 
 func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error {
@@ -131,7 +132,7 @@ func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error 
 		return err
 	}
 	buffer := new(bytes.Buffer)
-	err = encodeJsonSource(buffer, meta)
+	err = encodeJSONSource(buffer, meta)
 	if err != nil {
 		return err
 	}
@@ -349,9 +350,9 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	}
 	job := &LoadJob{
 		Credential: storageTransfer.Transfer.Target.CredentialFile,
-		TableId:    resourceFragments[1],
-		DatasetId:  resourceFragments[0],
-		ProjectId:  parsedUrl.Host,
+		TableID:    resourceFragments[1],
+		DatasetID:  resourceFragments[0],
+		ProjectID:  parsedUrl.Host,
 		Schema:     schema,
 		URIs:       URIs,
 	}
@@ -404,13 +405,11 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 
 	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(candidates))
 
-	var currentTransfers int32 = 0
+	var currentTransfers int32
 	for _, candidate := range candidates {
-
-		go func(candidate storage.Object, transferSource *Transfer) {
+		go func(limiter *toolbox.BatchLimiter, candidate storage.Object, transferSource *Transfer) {
 			limiter.Acquire()
 			defer limiter.Done()
-
 			targetTransfer := transferSource.New(source, target.Name, metaUrl)
 
 			targetTransfer.Target.Name = expandModExpressionIfPresent(transferSource.Target.Name, hash(candidate.URL()))
@@ -420,12 +419,11 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 
 			startTime := time.Now()
 			recordsProcessed, recordSkipped, e := s.transferObject(candidate, targetTransfer, task)
-
 			var errMessage string
 			if e != nil {
 				errMessage = e.Error()
 				if e != gzip.ErrChecksum {
-					logger.Printf("Failed to targetTransfer: %v %T\n", e, e)
+					logger.Printf("Failed to targetTransfer: %v \n", e)
 					err = e
 					return
 				}
@@ -438,17 +436,20 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 				recordsProcessed,
 				recordSkipped,
 				&startTime)
+			atomic.AddInt32(&task.Progress.RecordProcessed, int32(recordsProcessed))
+			atomic.AddInt32(&task.Progress.RecordSkipped, int32(recordSkipped))
+			atomic.AddInt32(&task.Progress.FileProcessed, 1)
 			atomic.AddInt32(&currentTransfers, 1)
 			limiter.Mutex.Lock()
 			defer limiter.Mutex.Unlock()
 			meta.Processed[candidate.URL()] = objectMeta
-
-		}(candidate, transfer)
+		}(limiter, candidate, transfer)
 	}
 	limiter.Wait()
 	if err != nil {
 		return nil, err
 	}
+	task.UpdateElapsed()
 	meta.RecentTransfers = int(currentTransfers)
 	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
 	logger.Printf("Completed: [%v] %v files in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
@@ -466,10 +467,6 @@ func (s *transferService) transferObject(source storage.Object, transfer *Transf
 	if response.Error != "" {
 		err = errors.New(response.Error)
 	}
-	atomic.AddInt32(&task.Progress.RecordProcessed, int32(response.RecordProcessed))
-	atomic.AddInt32(&task.Progress.RecordSkipped, int32(response.RecordProcessed))
-	atomic.AddInt32(&task.Progress.FileProcessed, 1)
-	task.UpdateElapsed()
 	return response.RecordProcessed, response.RecordSkipped, err
 
 }

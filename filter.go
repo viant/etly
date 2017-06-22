@@ -1,8 +1,9 @@
 package etly
 
 import (
-	"github.com/viant/toolbox"
 	"sync"
+
+	"github.com/viant/toolbox"
 )
 
 var filterRegistry *FilterRegistry
@@ -17,9 +18,6 @@ func (r *FilterRegistry) Register(name string, predicate toolbox.Predicate) {
 }
 
 func NewFilterRegistry() *FilterRegistry {
-	if filterRegistry != nil {
-		return filterRegistry
-	}
 	filterRegistryMux.Lock()
 	defer filterRegistryMux.Unlock()
 	if filterRegistry != nil {

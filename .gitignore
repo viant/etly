@@ -63,3 +63,5 @@ fabric.properties
 .vscode/
 
 *secret.json
+
+.DS_Store

@@ -2,16 +2,17 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
-	"github.com/viant/toolbox/storage/aws"
-	"github.com/viant/toolbox/storage/gs"
-	"google.golang.org/api/option"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
+	"github.com/viant/toolbox/storage/aws"
+	"github.com/viant/toolbox/storage/gs"
+	"google.golang.org/api/option"
 )
 
 var storageProvider *StorageProvider
