@@ -10,6 +10,8 @@ import (
 
 //Transfer represents Transfer rule
 type Transfer struct {
+	ID string `json:"ID,omitempty"`
+
 	Name string
 
 	Source *Source
@@ -166,6 +168,7 @@ func (t *Transfer) New(source, target, MetaURL string) *Transfer {
 //Clone creates a copy of the Transfer
 func (t *Transfer) Clone() *Transfer {
 	return &Transfer{
+		ID:                   t.ID,
 		Name:                 t.Name,
 		Source:               t.Source.Clone(),
 		Target:               t.Target.Clone(),

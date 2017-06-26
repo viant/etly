@@ -3,14 +3,15 @@ package etly
 import (
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"errors"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
 )
@@ -18,6 +19,9 @@ import (
 const (
 	SourceTypeURL       = "url"
 	SourceTypeDatastore = "datastore"
+
+	// MinParallelTransfer defines default minimum parallel transfers
+	MinParallelTransfer = 4
 )
 
 var regExpCache = make(map[string]*regexp.Regexp)
@@ -38,14 +42,14 @@ type transferService struct {
 	transferObjectService TransferObjectService
 }
 
-func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
-	storageObjects, err := storageService.List(folderUrl)
+func appendContentObject(storageService storage.Service, folderURL string, collection *[]storage.Object) error {
+	storageObjects, err := storageService.List(folderURL)
 	if err != nil {
 		return err
 	}
 	for _, objectStorage := range storageObjects {
 		if objectStorage.IsFolder() {
-			if objectStorage.URL() != folderUrl {
+			if objectStorage.URL() != folderURL {
 				err = appendContentObject(storageService, objectStorage.URL(), collection)
 				if err != nil {
 					return err
@@ -60,15 +64,14 @@ func appendContentObject(storageService storage.Service, folderUrl string, colle
 
 func (s *transferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
-	defer func(error) {
+	err = s.Transfer(task)
+	if err != nil {
+		task.Error = err.Error()
+		task.Status = taskErrorStatus
+	} else {
 		task.Status = taskDoneStatus
-		if err != nil {
-			task.Error = err.Error()
-			task.Status = taskErrorStatus
-		}
-
-	}(err)
-	return s.Transfer(task)
+	}
+	return err
 }
 
 func (s *transferService) Transfer(task *TransferTask) error {
@@ -186,13 +189,13 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 			return nil, err
 		}
 		expandedTarget := expandVaiables(transfer.Target.Name, variables)
-		expandedMetaUrl := expandVaiables(transfer.Meta.Name, variables)
-		key := expandedTarget + expandedMetaUrl
+		expandedMetaURL := expandVaiables(transfer.Meta.Name, variables)
+		key := expandedTarget + expandedMetaURL
 
 		storageTransfer, found := groupedTransfers[key]
 		if !found {
 			storageTransfer = &StorageObjectTransfer{
-				Transfer:       transfer.New(transfer.Source.Name, expandedTarget, expandedMetaUrl),
+				Transfer:       transfer.New(transfer.Source.Name, expandedTarget, expandedMetaURL),
 				StorageObjects: make([]storage.Object, 0),
 			}
 
@@ -219,8 +222,8 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, task *Tr
 	if err != nil {
 		return nil, err
 	}
+	logger.Printf("Found %v file(s) for transferId: %v", len(candidates), transfer.ID)
 	if len(transfer.VariableExtraction) == 0 {
-
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
 			StorageObjects: candidates,
@@ -238,7 +241,13 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, task *Tr
 	if err != nil {
 		return nil, err
 	}
-	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(storageTransfers))
+
+	// use MinParallelTransfer if not defined in config
+	var minParallelTransfer int
+	if transfer.MaxParallelTransfers > 0 {
+		minParallelTransfer = MinParallelTransfer
+	}
+	limiter := toolbox.NewBatchLimiter(minParallelTransfer, len(storageTransfers))
 	for _, storageTransfer := range storageTransfers {
 		go func(storageTransfer *StorageObjectTransfer) {
 			limiter.Acquire()
@@ -290,6 +299,10 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 			continue
 		}
 		if storageTransfer.Transfer.MaxTransfers > 0 && elgibleStorageCountSoFar >= storageTransfer.Transfer.MaxTransfers {
+			log.Printf("Reached Max Transfer: %v >= %v for ID %v",
+				elgibleStorageCountSoFar,
+				storageTransfer.Transfer.MaxTransfers,
+				storageTransfer.Transfer.ID)
 			break
 		}
 		filteredObjects = append(filteredObjects, candidate)
@@ -297,7 +310,7 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 
 	}
 	storageTransfer.StorageObjects = filteredObjects
-	return nil
+	return err
 }
 
 func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
@@ -305,44 +318,43 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	if err != nil {
 		return nil, err
 	}
-	logger.Printf("Process %v files for JobId:%v\n", len(storageTransfer.StorageObjects), storageTransfer.Transfer.Name)
+	logger.Printf("Process %v files for JobId:%v\n", len(storageTransfer.StorageObjects), storageTransfer.Transfer.ID)
 	if len(storageTransfer.StorageObjects) == 0 {
 		return nil, nil
 	}
 	transfer := storageTransfer.Transfer
 	switch strings.ToLower(transfer.Target.Type) {
 	case SourceTypeURL:
-		return s.transferFromUrlToUrl(storageTransfer, task)
+		return s.transferFromURLToURL(storageTransfer, task)
 	case SourceTypeDatastore:
-		return s.transferFromUrlToDatastore(storageTransfer, task)
+		return s.transferFromURLToDatastore(storageTransfer, task)
 	}
 	return nil, fmt.Errorf("Unsupported Transfer for target type: %v", transfer.Target.Type)
 }
 
-func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
+func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
 	meta, err = s.LoadMeta(storageTransfer.Transfer.Meta)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		err = s.persistMetaAndReportError(meta, storageTransfer.Transfer.Meta, err)
 	}()
-
 	if err != nil {
 		return nil, err
 	}
 	var startTime = time.Now()
 
 	var target = storageTransfer.Transfer.Target
-	parsedUrl, err := url.Parse(target.Name)
+	parsedURL, err := url.Parse(target.Name)
 	if err != nil {
 		return nil, err
 	}
-	if parsedUrl.Path == "" {
+	if parsedURL.Path == "" {
 		return nil, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://project/datset.table")
 	}
 
-	var resourceFragments = strings.Split(parsedUrl.Path[1:], ".")
+	var resourceFragments = strings.Split(parsedURL.Path[1:], ".")
 	if len(resourceFragments) != 2 {
 		return nil, fmt.Errorf("Invalid resource , the supported:  bg://project/datset.table")
 	}
@@ -359,7 +371,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		Credential: storageTransfer.Transfer.Target.CredentialFile,
 		TableID:    resourceFragments[1],
 		DatasetID:  resourceFragments[0],
-		ProjectID:  parsedUrl.Host,
+		ProjectID:  parsedURL.Host,
 		Schema:     schema,
 		URIs:       URIs,
 	}
@@ -370,8 +382,8 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	}
 	task.UpdateElapsed()
 	if len(status.Errors) > 0 {
-		for i, er := range status.Errors {
-			fmt.Printf("ERR %v -> %v", i, er)
+		for i, err := range status.Errors {
+			log.Printf("ERR (%v) -> %v\n", i, err)
 		}
 		return nil, fmt.Errorf(status.Errors[0].Message)
 	}
@@ -390,10 +402,21 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	if err != nil {
 		return nil, err
 	}
-	return meta, nil
+	return meta, err
 }
 
-func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
+func (s *transferService) persistMetaAndReportError(meta *Meta, metaReource *Resource, errSoFar error) (err error) {
+	if errSoFar != nil {
+		meta.AddError(errSoFar.Error())
+	}
+	err = s.persistMeta(meta, metaReource)
+	if errSoFar != nil {
+		return errSoFar
+	}
+	return err
+}
+
+func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
 	transfer := storageTransfer.Transfer
 	candidates := storageTransfer.StorageObjects
 	meta, err = s.LoadMeta(transfer.Meta)
@@ -401,12 +424,12 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 		return nil, err
 	}
 	defer func() {
-		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		err = s.persistMetaAndReportError(meta, storageTransfer.Transfer.Meta, err)
 	}()
 	var now = time.Now()
 	var source = transfer.Source.Name
 	var target = transfer.Target
-	var metaUrl = transfer.Meta.Name
+	var metaURL = transfer.Meta.Name
 	//all processed nothing new, the current assumption is that the whole file is process at once.
 	for len(candidates) == 0 {
 		logger.Println("No candidates no process")
@@ -420,7 +443,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 		go func(limiter *toolbox.BatchLimiter, candidate storage.Object, transferSource *Transfer) {
 			limiter.Acquire()
 			defer limiter.Done()
-			targetTransfer := transferSource.New(source, target.Name, metaUrl)
+			targetTransfer := transferSource.New(source, target.Name, metaURL)
 
 			targetTransfer.Target.Name = expandModExpressionIfPresent(transferSource.Target.Name, hash(candidate.URL()))
 			if strings.Contains(targetTransfer.Target.Name, "<file>") {
@@ -432,7 +455,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			var errMessage string
 			if e != nil {
 				errMessage = e.Error()
-				if e != gzip.ErrChecksum {
+				if e.Error() != gzip.ErrChecksum.Error() {
 					logger.Printf("Failed to targetTransfer: %v \n", e)
 					err = e
 					return
@@ -475,15 +498,15 @@ func (s *transferService) transferObject(source storage.Object, transfer *Transf
 	var response = s.transferObjectService.Transfer(request)
 	var err error
 	if response.Error != "" {
+		fmt.Printf("Error Reason: %v\n", response.ErrorReason)
 		err = errors.New(response.Error)
 	}
 	return response.RecordProcessed, response.RecordSkipped, err
-
 }
 
 func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Transfer, error) {
 	var transfers = make(map[string]*Transfer)
-	now := time.Now()
+	now := time.Now().In(time.UTC)
 	for i := 0; i < transfer.TimeWindow.Duration; i++ {
 		var timeUnit, err = transfer.TimeWindow.TimeUnit()
 		if err != nil {
@@ -500,18 +523,19 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 		source = expandCurrentWorkingDirectory(source)
 		target := expandDateExpressionIfPresent(transfer.Target.Name, &sourceTime)
 		target = expandCurrentWorkingDirectory(target)
-		metaUrl := expandDateExpressionIfPresent(transfer.Meta.Name, &sourceTime)
-		metaUrl = expandCurrentWorkingDirectory(metaUrl)
-		transferKey := source + "//" + target + "//" + metaUrl
+		metaURL := expandDateExpressionIfPresent(transfer.Meta.Name, &sourceTime)
+		metaURL = expandCurrentWorkingDirectory(metaURL)
+		transferKey := source + "::" + target + "::" + metaURL
 		candidate, found := transfers[transferKey]
 		if !found {
-			candidate = transfer.New(source, target, metaUrl)
+			candidate = transfer.New(source, target, metaURL)
 			transfers[transferKey] = candidate
 		}
 	}
 	var result = make([]*Transfer, 0)
-	for _, t := range transfers {
-		result = append(result, t)
+	for key, val := range transfers {
+		val.ID = val.ID + "key:(" + key + ")"
+		result = append(result, val)
 	}
 	return result, nil
 }

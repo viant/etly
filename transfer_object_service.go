@@ -2,10 +2,12 @@ package etly
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type TransferObjectRequest struct {
@@ -18,6 +20,7 @@ type TransferObjectResponse struct {
 	RecordProcessed int
 	RecordSkipped   int
 	Error           string
+	ErrorReason     string
 }
 
 type TransferObjectService interface {
@@ -29,12 +32,13 @@ type transferObjectService struct {
 }
 
 func (s *transferObjectService) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
+	fmt.Printf("Request.SourceURL: %v\nRequest.SourceName: %v\nRequest.TargetName: %v\nTimestamp: %v,", request.SourceURL, request.Transfer.Source.Name, request.Transfer.Target.Name, time.Now())
 	var sourceURL = request.SourceURL
 	var transfer = request.Transfer
 
 	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	if !hasProvider {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target), nil)
 	}
 	task := NewTransferTaskForId(request.TaskId, transfer)
 
@@ -42,30 +46,30 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 
 	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get storage service: %v", err))
+		return NewErrorTransferObjectResponse("Failed to get storage service", err)
 	}
 
 	source, err := storageService.StorageObject(sourceURL)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get souce: %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get souce: %v", sourceURL), err)
 	}
 	reader, err := storageService.Download(source)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to dowload: %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to dowload: %v", sourceURL), err)
 	}
 
 	content, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to read : %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to read : %v", sourceURL), err)
 	}
 	reader = bytes.NewReader(content)
 	reader, err = getEncodingReader(transfer.Source.Compression, reader)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to encoding reader : %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to encoding reader : %v", sourceURL), err)
 	}
 	content, err = ioutil.ReadAll(reader)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to readall : %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to readall : %v", sourceURL), err)
 	}
 	if transfer.Source.DataFormat == "ndjson" {
 		var err = s.transferObjectFromNewLineDelimiteredJson(content, transfer, task)
@@ -75,13 +79,11 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 			RecordSkipped:   int(task.Progress.RecordSkipped),
 		}
 		if err != nil {
-			response.Error = fmt.Sprintf("%v", err)
+			response.Error = err.Error()
 		}
 		return response
-
 	}
-	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
-
+	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target), errors.New("Unsupported source format"))
 }
 
 func (s *transferObjectService) transferObjectFromNewLineDelimiteredJson(source []byte, transfer *Transfer, task *TransferTask) error {
@@ -159,8 +161,9 @@ func newtransferObjectService(taskRegistry *TaskRegistry) TransferObjectService 
 	}
 }
 
-func NewErrorTransferObjectResponse(message string) *TransferObjectResponse {
+func NewErrorTransferObjectResponse(reason string, err error) *TransferObjectResponse {
 	return &TransferObjectResponse{
-		Error: message,
+		ErrorReason: reason,
+		Error:       err.Error(),
 	}
 }
