@@ -9,10 +9,9 @@ type ObjectMeta struct {
 	RecordSkipped       int
 	Timestamp           time.Time
 	ProcessingTimeInSec int
-	Message             string
-	Error               string
+	Message             string `json:",omitempty"`
+	Error               string `json:",omitempty"`
 }
-
 
 func NewObjectMeta(source, target, message, err string, recordProcessed, recordSkipped int, starTime *time.Time) *ObjectMeta {
 	return &ObjectMeta{
@@ -32,9 +31,8 @@ type Meta struct {
 	Processed           map[string]*ObjectMeta
 	ProcessingTimeInSec int
 	RecentTransfers     int
-	Errors []string
+	Errors              []string
 }
-
 
 func (m *Meta) AddError(error string) {
 	if len(m.Errors) == 0 {
@@ -42,7 +40,6 @@ func (m *Meta) AddError(error string) {
 	}
 	m.Errors = append(m.Errors, error)
 }
-
 
 func NewMeta(URL string) *Meta {
 	return &Meta{

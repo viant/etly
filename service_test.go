@@ -36,31 +36,3 @@ func init() {
 		return &Log1{}
 	})
 }
-
-func TestService_Run(t *testing.T) {
-
-	var files = []string{etly.GetCurrentWorkingDir() + "test/data/out/1_file1.log",
-		etly.GetCurrentWorkingDir() + "test/data/out/0_file2.log",
-		etly.GetCurrentWorkingDir() + "test/data/out/meta.json",
-	}
-	for _, file := range files {
-		if toolbox.FileExists(file) {
-			os.Remove(file)
-		}
-		defer os.Remove(file)
-	}
-
-	var configUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/config.json"
-	config, err := etly.NewConfigFromURL(configUrl)
-	assert.Nil(t, err)
-	s, err := etly.NewService(config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = s.Run()
-	for _, file := range files {
-		assert.True(t, toolbox.FileExists(file))
-	}
-	assert.Nil(t, err)
-
-}
