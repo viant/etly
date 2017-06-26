@@ -13,6 +13,7 @@ type ObjectMeta struct {
 	Error               string
 }
 
+
 func NewObjectMeta(source, target, message, err string, recordProcessed, recordSkipped int, starTime *time.Time) *ObjectMeta {
 	return &ObjectMeta{
 		Source:              source,
@@ -31,7 +32,17 @@ type Meta struct {
 	Processed           map[string]*ObjectMeta
 	ProcessingTimeInSec int
 	RecentTransfers     int
+	Errors []string
 }
+
+
+func (m *Meta) AddError(error string) {
+	if len(m.Errors) == 0 {
+		m.Errors = make([]string, 0)
+	}
+	m.Errors = append(m.Errors, error)
+}
+
 
 func NewMeta(URL string) *Meta {
 	return &Meta{

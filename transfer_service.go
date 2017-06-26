@@ -319,8 +319,15 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	return nil, fmt.Errorf("Unsupported Transfer for target type: %v", transfer.Target.Type)
 }
 
-func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
-	meta, err := s.LoadMeta(storageTransfer.Transfer.Meta)
+func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
+	meta, err = s.LoadMeta(storageTransfer.Transfer.Meta)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+	}()
+
 	if err != nil {
 		return nil, err
 	}
@@ -386,13 +393,16 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	return meta, nil
 }
 
-func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
+func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
 	transfer := storageTransfer.Transfer
 	candidates := storageTransfer.StorageObjects
-	meta, err := s.LoadMeta(transfer.Meta)
+	meta, err = s.LoadMeta(transfer.Meta)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+	}()
 	var now = time.Now()
 	var source = transfer.Source.Name
 	var target = transfer.Target
@@ -453,7 +463,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	meta.RecentTransfers = int(currentTransfers)
 	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
 	logger.Printf("Completed: [%v] %v files in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
-	return meta, s.persistMeta(meta, storageTransfer.Transfer.Meta)
+	return meta, err
 }
 
 func (s *transferService) transferObject(source storage.Object, transfer *Transfer, task *TransferTask) (int, int, error) {
