@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/viant/etly"
 	"github.com/viant/toolbox"
+	"time"
 )
 
 type Log1 struct {
@@ -50,14 +51,22 @@ func TestService_Run(t *testing.T) {
 		defer os.Remove(file)
 	}
 
-	var configUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/config.json"
-	config, err := etly.NewConfigFromURL(configUrl)
+
+	var serverConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/server_config.json"
+	serverConfig, err := etly.NewServerConfigFromURL(serverConfigUrl)
 	assert.Nil(t, err)
-	s, err := etly.NewService(config)
+
+	var transferConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/transfer_config.json"
+	transferConfig, err := etly.NewTransferConfigFromURL(transferConfigUrl)
+	assert.Nil(t, err)
+
+	s, err := etly.NewService(serverConfig, transferConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 	err = s.Run()
+
+	time.Sleep(time.Second)
 	for _, file := range files {
 		assert.True(t, toolbox.FileExists(file))
 	}

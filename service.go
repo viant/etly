@@ -56,9 +56,9 @@ func (s *Service) Start() error {
 			case <-s.stopNotification:
 				break
 			case <-time.After(sleepDuration):
-				err := s.run()
+				err := s.Run()
 				if err != nil {
-					logger.Printf("Failed to run status %v", err)
+					logger.Printf("Failed to Run status %v", err)
 				}
 			}
 		}
@@ -66,7 +66,7 @@ func (s *Service) Start() error {
 	return nil
 }
 
-func (s *Service) run() error {
+func (s *Service) Run() error {
 	var result error
 	if s.transferConfig == nil || len(s.transferConfig.Transfers) == 0 {
 		return result

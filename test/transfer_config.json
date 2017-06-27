@@ -1,0 +1,33 @@
+{
+  "Transfers": [
+    {
+      "Source":{
+        "Name":"file://<pwd>test/data/in",
+        "Type":"url",
+        "DataFormat": "ndjson",
+        "DataType": "service_test.Log1"
+      },
+      "Target":{
+        "Name": "file://<pwd>test/data/out/<mod:2>_<file>",
+        "Type": "url",
+        "DataFormat": "ndjson"
+      },
+
+      "TimeWindow": {
+        "Duration": 3,
+        "Unit": "sec"
+      },
+      "Frequency": {
+        "Duration": 1,
+        "Unit": "sec"
+      },
+      "Meta": {
+        "Name": "file://<pwd>test/data/out/meta.json",
+        "CredentialFile": "/etc/etly/secret/gs.json"
+      },
+      "Transformer": "service_test.Log1ToLog2",
+      "MaxParallelTransfers":2,
+      "MaxTransfers":10
+    }
+  ]
+}
