@@ -348,19 +348,19 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	var target = storageTransfer.Transfer.Target
 	parsedURL, err := url.Parse(target.Name)
 	if err != nil {
-		return nil, err
+		return meta, err
 	}
 	if parsedURL.Path == "" {
-		return nil, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://project/datset.table")
+		return meta, fmt.Errorf("Invalid BigQuery target, see the supported form: bg://project/datset.table")
 	}
 
 	var resourceFragments = strings.Split(parsedURL.Path[1:], ".")
 	if len(resourceFragments) != 2 {
-		return nil, fmt.Errorf("Invalid resource , the supported:  bg://project/datset.table")
+		return meta, fmt.Errorf("Invalid resource , the supported:  bg://project/datset.table")
 	}
 	schema, err := SchemaFromFile(target.Schema.Name)
 	if err != nil {
-		return nil, err
+		return meta, err
 	}
 	var URIs = make([]string, 0)
 	for _, storageObject := range storageTransfer.StorageObjects {
@@ -378,14 +378,14 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	task.UpdateElapsed()
 	status, jobId, err := NewBigqueryService().Load(job)
 	if err != nil {
-		return nil, err
+		return meta, err
 	}
 	task.UpdateElapsed()
 	if len(status.Errors) > 0 {
 		for i, err := range status.Errors {
 			log.Printf("ERR (%v) -> %v\n", i, err)
 		}
-		return nil, fmt.Errorf(status.Errors[0].Message)
+		return meta, fmt.Errorf(status.Errors[0].Message)
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
@@ -400,7 +400,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	}
 	err = s.persistMeta(meta, storageTransfer.Transfer.Meta)
 	if err != nil {
-		return nil, err
+		return meta, err
 	}
 	return meta, err
 }
@@ -480,7 +480,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 	}
 	limiter.Wait()
 	if err != nil {
-		return nil, err
+		return meta, err
 	}
 	task.UpdateElapsed()
 	meta.RecentTransfers = int(currentTransfers)
