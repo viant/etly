@@ -310,10 +310,11 @@ func (s *transferService) updateMetaStatus(meta *Meta, storageTransfer *StorageO
 	}
 	if storageTransfer != nil && storageTransfer.IndexedStorageObjects != nil {
 		var sourceStatus= &ProcessingStatus{}
-		for source, object := range meta.Processed {
-			if _, found := storageTransfer.IndexedStorageObjects[source]; found {
+
+		for source := range storageTransfer.IndexedStorageObjects {
+			if value, found := meta.Processed[source]; found {
 				sourceStatus.ResourceProcessed++
-				sourceStatus.RecordProcessed += int(object.RecordProcessed)
+				sourceStatus.RecordProcessed += int(value.RecordProcessed)
 			} else {
 				sourceStatus.ResourcePending++
 			}
