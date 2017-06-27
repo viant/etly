@@ -322,10 +322,10 @@ func (s *transferService) updateMetaStatus(meta *Meta, storageTransfer *StorageO
 	}
 }
 
-func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
-	meta, err = s.LoadMeta(storageTransfer.Transfer.Meta)
-	if err != nil {
-		return nil, err
+func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (m *Meta, err error) {
+	meta, e := s.LoadMeta(storageTransfer.Transfer.Meta)
+	if e != nil {
+		return nil, e
 	}
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
@@ -395,12 +395,12 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	return meta, err
 }
 
-func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
+func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (m *Meta, err error) {
 	transfer := storageTransfer.Transfer
 	candidates := storageTransfer.StorageObjects
-	meta, err = s.LoadMeta(transfer.Meta)
-	if err != nil {
-		return nil, err
+	meta, e := s.LoadMeta(transfer.Meta)
+	if e != nil {
+		return nil, e
 	}
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
