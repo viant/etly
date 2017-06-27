@@ -38,25 +38,6 @@ type transferService struct {
 	transferObjectService TransferObjectService
 }
 
-func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
-	storageObjects, err := storageService.List(folderUrl)
-	if err != nil {
-		return err
-	}
-	for _, objectStorage := range storageObjects {
-		if objectStorage.IsFolder() {
-			if objectStorage.URL() != folderUrl {
-				err = appendContentObject(storageService, objectStorage.URL(), collection)
-				if err != nil {
-					return err
-				}
-			}
-		} else {
-			*collection = append(*collection, objectStorage)
-		}
-	}
-	return nil
-}
 
 func (s *transferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
@@ -93,8 +74,8 @@ func (s *transferService) Transfer(task *TransferTask) error {
 }
 
 func (s *transferService) transferDataFromURLSources(transfers []*Transfer, task *TransferTask) error {
-	for _, transfer := range transfers {
-		_, err := s.transferDataFromURLSource(transfer, task)
+	for i, transfer := range transfers {
+		_, err := s.transferDataFromURLSource(i, transfer, task)
 		if err != nil {
 			return err
 		}
@@ -209,7 +190,7 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 	return result, nil
 }
 
-func (s *transferService) transferDataFromURLSource(transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
+func (s *transferService) transferDataFromURLSource(index int, transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
 	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
 		return nil, err
@@ -219,12 +200,13 @@ func (s *transferService) transferDataFromURLSource(transfer *Transfer, task *Tr
 	if err != nil {
 		return nil, err
 	}
-	if len(transfer.VariableExtraction) == 0 {
 
+	if len(transfer.VariableExtraction) == 0 {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
 			StorageObjects: candidates,
 		}, task)
+
 		if err != nil {
 			return nil, err
 		}
@@ -277,8 +259,10 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 	var elgibleStorageCountSoFar = 0
 	var alreadyProcess = 0
 
-	for _, candidate := range storageTransfer.StorageObjects {
+	storageTransfer.IndexedStorageObjects = make(map[string]storage.Object)
 
+	for _, candidate := range storageTransfer.StorageObjects {
+		storageTransfer.IndexedStorageObjects[candidate.URL()] = candidate
 		if _, found := meta.Processed[candidate.URL()]; found {
 			alreadyProcess++
 			continue
@@ -290,7 +274,7 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 			continue
 		}
 		if storageTransfer.Transfer.MaxTransfers > 0 && elgibleStorageCountSoFar >= storageTransfer.Transfer.MaxTransfers {
-			break
+			continue
 		}
 		filteredObjects = append(filteredObjects, candidate)
 		elgibleStorageCountSoFar++
@@ -301,6 +285,7 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 }
 
 func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTransfer, task *TransferTask) (*Meta, error) {
+
 	err := s.filterStorageObjects(storageTransfer)
 	if err != nil {
 		return nil, err
@@ -319,15 +304,36 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	return nil, fmt.Errorf("Unsupported Transfer for target type: %v", transfer.Target.Type)
 }
 
+func (s *transferService) updateMetaStatus(meta *Meta, storageTransfer *StorageObjectTransfer, err error) {
+	if err != nil {
+		meta.AddError(fmt.Sprintf("%v", err))
+	}
+	if storageTransfer != nil && storageTransfer.IndexedStorageObjects != nil {
+		var sourceStatus= &ProcessingStatus{}
+		for source, object := range meta.Processed {
+			if _, found := storageTransfer.IndexedStorageObjects[source]; found {
+				sourceStatus.ResourceProcessed++
+				sourceStatus.RecordProcessed += int(object.RecordProcessed)
+			} else {
+				sourceStatus.ResourcePending++
+			}
+		}
+		meta.PutStatus(storageTransfer.Transfer.Source.Name, sourceStatus)
+	}
+}
+
 func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
 	meta, err = s.LoadMeta(storageTransfer.Transfer.Meta)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		s.updateMetaStatus(meta, storageTransfer, err)
+		e := s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		if err == nil {
+			err = e
+		}
 	}()
-
 	if err != nil {
 		return nil, err
 	}
@@ -386,11 +392,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 			0,
 			&startTime)
 	}
-	err = s.persistMeta(meta, storageTransfer.Transfer.Meta)
-	if err != nil {
-		return nil, err
-	}
-	return meta, nil
+	return meta, err
 }
 
 func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (meta *Meta, err error) {
@@ -401,7 +403,12 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 		return nil, err
 	}
 	defer func() {
-		s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		s.updateMetaStatus(meta, storageTransfer, err)
+		e := s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		if err == nil {
+			err = e
+		}
+
 	}()
 	var now = time.Now()
 	var source = transfer.Source.Name

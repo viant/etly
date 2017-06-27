@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
 )
 
 const timeVariableExpr = "<dateFormat:"
@@ -130,4 +131,26 @@ func decodeJSONTarget(reader io.Reader, target interface{}) error {
 
 func encodeJSONSource(writer io.Writer, target interface{}) error {
 	return jsonEncoderFactory.Create(writer).Encode(target)
+}
+
+
+
+func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
+	storageObjects, err := storageService.List(folderUrl)
+	if err != nil {
+		return err
+	}
+	for _, objectStorage := range storageObjects {
+		if objectStorage.IsFolder() {
+			if objectStorage.URL() != folderUrl {
+				err = appendContentObject(storageService, objectStorage.URL(), collection)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			*collection = append(*collection, objectStorage)
+		}
+	}
+	return nil
 }

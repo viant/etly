@@ -66,10 +66,14 @@ func TestService_Run(t *testing.T) {
 	}
 	err = s.Run()
 
-	time.Sleep(time.Second)
+	time.Sleep(1 *time.Second)
 	for _, file := range files {
 		assert.True(t, toolbox.FileExists(file))
 	}
 	assert.Nil(t, err)
+
+	response := s.ProcessingStatus("meta")
+	assert.Equal(t, "", response.Error)
+	assert.Equal(t, 4, response.Status[0].Status.RecordProcessed)
 
 }

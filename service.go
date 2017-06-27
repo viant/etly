@@ -8,6 +8,9 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"strings"
+	"github.com/viant/toolbox/storage"
+	"fmt"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -122,7 +125,7 @@ func (s *Service) GetErrors() []*ObjectMeta {
 	//		logger.Printf("Failed to load Meta file: %v %v", transfer, err)
 	//		continue
 	//	}
-	//	for _, processedFile := range meta.Processed {
+	//	for _, processedFile := range meta.ProcessedResources {
 	//		if processedFile.Error != "" {
 	//			corruptedFiles = append(corruptedFiles, processedFile)
 	//		}
@@ -130,6 +133,67 @@ func (s *Service) GetErrors() []*ObjectMeta {
 	//}
 	return corruptedFiles
 }
+
+
+func (s *Service) getMetaObject(name string, metaResource Resource) ([]*Meta, error) {
+	parentUrlIndex := strings.LastIndex(metaResource.Name, "/")
+	if parentUrlIndex == -1 {
+		return nil, nil
+	}
+	var candidates = make([]storage.Object, 0)
+	parentURL := expandCurrentWorkingDirectory(metaResource.Name[:parentUrlIndex])
+	service, err := getStorageService(&metaResource)
+	if err != nil {
+		return nil, err
+	}
+	appendContentObject(service, parentURL, &candidates)
+	var result = make([]*Meta, 0)
+	for _, candidate := range candidates {
+		if ! strings.Contains(candidate.URL(), name) {
+			continue
+		}
+		metaResource.Name = candidate.URL()
+		meta, err := s.transferService.LoadMeta(&metaResource)
+		if err != nil{
+			return nil, err
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
+func (s *Service) ProcessingStatus(name string) *StatusInfoResponse {
+	var response = NewStatusInfoResponse()
+	var metaResources = make([]*Resource, 0)
+	for _, transfer := range s.transferConfig.Transfers {
+		if strings.Contains(transfer.Meta.Name, name) {
+			metaResources = append(metaResources, transfer.Meta)
+		}
+	}
+
+
+	for _, metaResource := range metaResources {
+		metaList, err := s.getMetaObject(name, *metaResource)
+		if err != nil {
+			response.Error = fmt.Sprint("%v", err)
+			return response
+		}
+
+		for _, meta:= range metaList {
+
+			resourceStatus := NewResourceStatusInfo()
+			resourceStatus.Resource = meta.URL
+			resourceStatus.Errors = meta.Errors
+			resourceStatus.Status = meta.Status
+			resourceStatus.ResourceStatus = meta.ResourceStatus
+			response.Status = append(response.Status, resourceStatus)
+		}
+	}
+	toolbox.ReverseSlice(response.Status)
+	return response
+}
+
+
 
 func (s *Service) Stop() {
 	atomic.StoreInt32(&s.isRunning, 0)

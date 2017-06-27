@@ -91,43 +91,34 @@ func (f *SourceLogFilter) etlyly(source interface{}) bool {
  Example
 ```json
 {
-  "Transfers": [
-    {
-      "Name":"S3 Bid Logs To GS",
-      "Source": "s3://bucket//<dateFormat:yyyy>/<dateFormat:MM>/<dateFormat:dd>/<dateFormat:hh>/",
-      "SourceType": "url",
-      "SourceFormat": "ndjson",
-      "SourceEncoding": "gzip",
-      "SourceDataType": "SourceLog",
-      "SourceDataTypeMatch": [{
-        "MatchingFragment": "\"exclude\""
-      }],
-      "Target": "gs://bucket/table/<dateFormat:yyyy><dateFormat:MM><dateFormat:dd>/<mod:40>/<dateFormat:hh>-<file>",
-      "TargetType": "url",
-      "TargetEncoding": "gzip",
-      "TimeWindow": 48,
-      "TimeWindowUnit": "hour",
-      "MetaUrl": "gs://bucket/table/<dateFormat:yyyy><dateFormat:MM><dateFormat:dd>/transfer-meta.json",
-      "Filter": "SourceLogFilter",
-      "Transformer": "SourceLogTransformer",
-      "MaxParallelTransfers": 4,
-      "MaxTransfers": 8,
-      "TimeFrequency": 1,
-      "TimeFrequencyUnit": "min"
-    }
-  ],
-  "Port":8081,
 
-  "Storage": [
-    {
-      "Schema": "gs",
-      "config": "/secret/gs.json"
-    },
-    {
-      "Schema": "s3",
-      "config": "/secret/s3.json"
-    }
-  ]
+   "Source":{
+     "Name":"file://<pwd>test/data/in",
+     "Type":"url",
+     "DataFormat": "ndjson",
+     "DataType": "service_test.Log1"
+   },
+   "Target":{
+     "Name": "file://<pwd>test/data/out/<mod:2>_<file>",
+     "Type": "url",
+     "DataFormat": "ndjson"
+   },
+
+   "TimeWindow": {
+     "Duration": 3,
+     "Unit": "sec"
+   },
+   "Frequency": {
+     "Duration": 1,
+     "Unit": "sec"
+   },
+   "Meta": {
+     "Name": "file://<pwd>test/data/out/meta.json",
+     "CredentialFile": "/etc/etly/secret/gs.json"
+   },
+   "Transformer": "service_test.Log1ToLog2",
+   "MaxParallelTransfers":2,
+   "MaxTransfers":10
 }
 ```
 
