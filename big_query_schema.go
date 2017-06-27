@@ -54,8 +54,8 @@ func convertSchema(fieldSchema *BigqueryField) *bigquery.FieldSchema {
 	newFieldSchema := &bigquery.FieldSchema{}
 	newFieldSchema.Name = fieldSchema.Name
 
-	// Set Repeated value if type is "REPEATED"
-	newFieldSchema.Repeated = strings.ToUpper(fieldSchema.Type) == string(bigquery.RecordFieldType)
+	// Set Repeated value if mode is "REPEATED"
+	newFieldSchema.Repeated = strings.ToLower(fieldSchema.Mode) == "repeated"
 
 	// FieldType is a native Uppercase string type
 	newFieldSchema.Type = (bigquery.FieldType)(strings.ToUpper(fieldSchema.Type))
