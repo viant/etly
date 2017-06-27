@@ -171,7 +171,7 @@ func (s *Service) ProcessingStatus(name string) *StatusInfoResponse {
 		}
 	}
 
-
+	var metaUrl = make(map[string]bool)
 	for _, metaResource := range metaResources {
 		metaList, err := s.getMetaObject(name, *metaResource)
 		if err != nil {
@@ -180,7 +180,10 @@ func (s *Service) ProcessingStatus(name string) *StatusInfoResponse {
 		}
 
 		for _, meta:= range metaList {
-
+			if metaUrl[meta.URL] {
+				continue
+			}
+			metaUrl[meta.URL] = true
 			resourceStatus := NewResourceStatusInfo()
 			resourceStatus.Resource = meta.URL
 			resourceStatus.Errors = meta.Errors
