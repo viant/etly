@@ -56,7 +56,7 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 		},
 		toolbox.ServiceRouting{
 			HTTPMethod: "GET",
-			URI:        uriBasePath + "info",
+			URI:        uriBasePath + "info/{name}",
 			Handler:    service.ProcessingStatus,
 			Parameters: []string{"name"},
 		},
