@@ -112,6 +112,7 @@ outer:
 			}
 		}
 		var source = provider()
+
 		err := decodeJSONTarget(bytes.NewReader([]byte(line)), source)
 		if err != nil {
 			return fmt.Errorf("Failed to decode json: [%v] %v %v", i, err, line)

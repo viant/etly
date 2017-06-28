@@ -126,14 +126,24 @@ func hash(text string) int {
 }
 
 func decodeJSONTarget(reader io.Reader, target interface{}) error {
-	return jsonDecoderFactory.Create(reader).Decode(target)
+	var factory toolbox.DecoderFactory
+	if _, ok := target.(toolbox.UnMarshaler); ok {
+		factory = toolbox.NewUnMarshalerDecoderFactory()
+	} else {
+		factory = jsonDecoderFactory
+	}
+	return factory.Create(reader).Decode(target)
 }
 
 func encodeJSONSource(writer io.Writer, target interface{}) error {
-	return jsonEncoderFactory.Create(writer).Encode(target)
+	var factory toolbox.EncoderFactory
+	if _, ok := target.(toolbox.Marshaler); ok {
+		factory = toolbox.NewMarshalerEncoderFactory()
+	} else {
+		factory = jsonEncoderFactory
+	}
+	return factory.Create(writer).Encode(target)
 }
-
-
 
 func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
 	storageObjects, err := storageService.List(folderUrl)
