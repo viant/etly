@@ -11,6 +11,7 @@ import (
 
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
+	"fmt"
 )
 
 const timeVariableExpr = "<dateFormat:"
@@ -163,4 +164,77 @@ func appendContentObject(storageService storage.Service, folderUrl string, colle
 		}
 	}
 	return nil
+}
+
+
+
+func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
+	var result = make(map[string]string)
+	for _, variableExtraction := range variableExtractionRules {
+		var value = ""
+		switch strings.ToLower(variableExtraction.Source) {
+		case "sourceurl":
+
+			compiledExpression, err := compileRegExpr(variableExtraction.RegExpr)
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
+			}
+
+			if compiledExpression.MatchString(source.URL()) {
+				matched := compiledExpression.FindStringSubmatch(source.URL())
+				value = matched[1]
+			}
+			result[variableExtraction.Name] = value
+		case "source", "target":
+			//do nothing
+		default:
+			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
+
+		}
+	}
+	return result, nil
+}
+
+
+func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction, source, target interface{}) (map[string]string, error) {
+	var result = make(map[string]string)
+	for _, variableExtraction := range variableExtractionRules {
+
+		var value = ""
+		switch strings.ToLower(variableExtraction.Source) {
+		case "sourceurl":
+			//do nothing
+		case "source":
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			if err != nil {
+				return nil, err
+			}
+			value = provider(source)
+
+		case "target":
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			if err != nil {
+				return nil, err
+			}
+			value = provider(target)
+
+		default:
+			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
+
+		}
+		result[variableExtraction.Name]  = value
+
+	}
+	return result, nil
+}
+
+
+func expandVaiables(text string, variables map[string]string) string {
+	for k, v := range variables {
+		if strings.Contains(text, k) {
+			text = strings.Replace(text, k, v, -1)
+		}
+	}
+	return text
 }

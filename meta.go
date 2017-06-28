@@ -34,6 +34,12 @@ type ProcessingStatus struct {
 	RecordProcessed   int
 }
 
+
+type ResourcedMeta struct {
+	Meta *Meta
+	Resource *Resource
+}
+
 type Meta struct {
 	URL                 string
 	Processed           map[string]*ObjectMeta

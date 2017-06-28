@@ -39,6 +39,8 @@ type transferService struct {
 }
 
 
+
+
 func (s *transferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
 	defer func(error) {
@@ -107,62 +109,23 @@ func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
 	return result, decodeJSONTarget(reader, &result)
 }
 
-func (s *transferService) persistMeta(meta *Meta, metaResource *Resource) error {
-	storageService, err := getStorageService(metaResource)
+func (s *transferService) persistMeta(resourcedMeta *ResourcedMeta) error {
+	storageService, err := getStorageService(resourcedMeta.Resource)
 	if err != nil {
 		return err
 	}
 	buffer := new(bytes.Buffer)
-	err = encodeJSONSource(buffer, meta)
+	err = encodeJSONSource(buffer, resourcedMeta.Meta)
 	if err != nil {
 		return err
 	}
-	return storageService.Upload(meta.URL, bytes.NewReader(buffer.Bytes()))
-}
-
-func buildVariableMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
-	var result = make(map[string]string)
-	for _, variableExtraction := range variableExtractionRules {
-		var value = ""
-		switch variableExtraction.Source {
-		case "source":
-
-			compiledExpression, err := compileRegExpr(variableExtraction.RegExpr)
-
-			if err != nil {
-				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
-			}
-
-			if compiledExpression.MatchString(source.URL()) {
-				matched := compiledExpression.FindStringSubmatch(source.URL())
-				value = matched[1]
-			}
-			result[variableExtraction.Name] = value
-
-		case "record":
-			return nil, fmt.Errorf("Not supporte yet, keep waiting,  source: %v", variableExtraction.Source)
-
-		default:
-			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
-
-		}
-	}
-	return result, nil
-}
-
-func expandVaiables(text string, variables map[string]string) string {
-	for k, v := range variables {
-		if strings.Contains(text, k) {
-			text = strings.Replace(text, k, v, -1)
-		}
-	}
-	return text
+	return storageService.Upload(resourcedMeta.Meta.URL, bytes.NewReader(buffer.Bytes()))
 }
 
 func (s *transferService) expandTransferWithVariableExpression(transfer *Transfer, storeObjects []storage.Object) ([]*StorageObjectTransfer, error) {
 	var groupedTransfers = make(map[string]*StorageObjectTransfer)
 	for _, storageObject := range storeObjects {
-		var variables, err = buildVariableMap(transfer.VariableExtraction, storageObject)
+		var variables, err = buildVariableMasterServiceMap(transfer.VariableExtraction, storageObject)
 		if err != nil {
 			return nil, err
 		}
@@ -201,12 +164,11 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		return nil, err
 	}
 
-	if len(transfer.VariableExtraction) == 0 {
+	if ! transfer.HasVariableExtraction() {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
 			StorageObjects: candidates,
 		}, task)
-
 		if err != nil {
 			return nil, err
 		}
@@ -215,12 +177,19 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		}
 		return []*Meta{meta}, nil
 	}
+
+
+
+
 	result = make([]*Meta, 0)
 	storageTransfers, err := s.expandTransferWithVariableExpression(transfer, candidates)
 	if err != nil {
 		return nil, err
 	}
-	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(storageTransfers))
+	if transfer.MaxParallelTransfers == 0 {
+		transfer.MaxParallelTransfers = 4;
+	}
+	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers, len(storageTransfers))
 	for _, storageTransfer := range storageTransfers {
 		go func(storageTransfer *StorageObjectTransfer) {
 			limiter.Acquire()
@@ -301,7 +270,7 @@ func (s *transferService) transferFromURLSource(storageTransfer *StorageObjectTr
 	case SourceTypeDatastore:
 		return s.transferFromUrlToDatastore(storageTransfer, task)
 	}
-	return nil, fmt.Errorf("Unsupported Transfer for target type: %v", transfer.Target.Type)
+	return nil, fmt.Errorf("Unsupported ProcessedTransfers for target type: %v", transfer.Target.Type)
 }
 
 func (s *transferService) updateMetaStatus(meta *Meta, storageTransfer *StorageObjectTransfer, err error) {
@@ -330,7 +299,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	}
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
-		e := s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta})
 		if err == nil {
 			err = e
 		}
@@ -396,6 +365,12 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	return meta, err
 }
 
+type WorkerProcessedTransferMeta struct {
+	ProcessedTransfers []*ProcessedTransfer
+	ObjectMeta        *ObjectMeta
+}
+
+
 func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (m *Meta, err error) {
 	transfer := storageTransfer.Transfer
 	candidates := storageTransfer.StorageObjects
@@ -403,14 +378,15 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	if e != nil {
 		return nil, e
 	}
+
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
-		e := s.persistMeta(meta, storageTransfer.Transfer.Meta)
+		e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta})
 		if err == nil {
 			err = e
 		}
-
 	}()
+
 	var now = time.Now()
 	var source = transfer.Source.Name
 	var target = transfer.Target
@@ -422,6 +398,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	}
 
 	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers|4, len(candidates))
+	workerProcessedTransferMeta := make([]*WorkerProcessedTransferMeta, 0)
 
 	var currentTransfers int32
 	for _, candidate := range candidates {
@@ -436,7 +413,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			}
 
 			startTime := time.Now()
-			recordsProcessed, recordSkipped, e := s.transferObject(candidate, targetTransfer, task)
+			recordsProcessed, recordSkipped, processedTransfers, e := s.transferObject(candidate, targetTransfer, task)
 			var errMessage string
 			if e != nil {
 				errMessage = e.Error()
@@ -459,10 +436,21 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			atomic.AddInt32(&task.Progress.FileProcessed, 1)
 			atomic.AddInt32(&currentTransfers, 1)
 			limiter.Mutex.Lock()
+			if len(processedTransfers) > 0 {
+				workerProcessedTransferMeta = append(workerProcessedTransferMeta, &WorkerProcessedTransferMeta{
+					ProcessedTransfers: processedTransfers,
+					ObjectMeta:objectMeta,
+				})
+			}
 			defer limiter.Mutex.Unlock()
 			meta.Processed[candidate.URL()] = objectMeta
 		}(limiter, candidate, transfer)
 	}
+
+	if len(workerProcessedTransferMeta) > 0 {
+		s.updateWorkerProcessedTransferMeta(workerProcessedTransferMeta, storageTransfer)
+	}
+
 	limiter.Wait()
 	if err != nil {
 		return nil, err
@@ -472,9 +460,42 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
 	logger.Printf("Completed: [%v] %v files in %v sec\n", transfer.Name, len(meta.Processed), meta.ProcessingTimeInSec)
 	return meta, err
+
 }
 
-func (s *transferService) transferObject(source storage.Object, transfer *Transfer, task *TransferTask) (int, int, error) {
+
+func (s *transferService) updateWorkerProcessedTransferMeta(workerProcessedTransferMetas []*WorkerProcessedTransferMeta, storageTransfer *StorageObjectTransfer)  {
+	var resourcedMetas = make(map[string]*ResourcedMeta)
+	for _, workerProcessedTransferMeta := range workerProcessedTransferMetas {
+		for _, processedTransfer := range workerProcessedTransferMeta.ProcessedTransfers {
+			resourceMeta, found := resourcedMetas[processedTransfer.Transfer.Meta.Name]
+			if ! found {
+				meta, err := s.LoadMeta(processedTransfer.Transfer.Meta)
+				if err != nil {
+					logger.Printf("Failed to load worker meta: %v ", err)
+					continue
+				}
+				resourceMeta = &ResourcedMeta{
+					Meta:     meta,
+					Resource: processedTransfer.Transfer.Meta,
+				}
+				resourcedMetas[processedTransfer.Transfer.Meta.Name] = resourceMeta
+			}
+
+			resourceMeta.Meta.Processed[workerProcessedTransferMeta.ObjectMeta.Target] = workerProcessedTransferMeta.ObjectMeta
+			resourceMeta.Meta.Status.RecordProcessed += processedTransfer.RecordProcessed
+		}
+	}
+
+	for _, resourcedMeta := range resourcedMetas {
+		err := s.persistMeta(resourcedMeta)
+		if err != nil {
+			logger.Printf("Failed to persist worker meta: %v", err)
+		}
+	}
+}
+
+func (s *transferService) transferObject(source storage.Object, transfer *Transfer, task *TransferTask) (int, int, []*ProcessedTransfer, error) {
 	request := &TransferObjectRequest{
 		SourceURL: source.URL(),
 		Transfer:  transfer,
@@ -485,7 +506,7 @@ func (s *transferService) transferObject(source storage.Object, transfer *Transf
 	if response.Error != "" {
 		err = errors.New(response.Error)
 	}
-	return response.RecordProcessed, response.RecordSkipped, err
+	return response.RecordProcessed, response.RecordSkipped, response.ProcessedTransfers, err
 
 }
 

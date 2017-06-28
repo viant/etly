@@ -8,7 +8,10 @@ import (
 	"github.com/viant/toolbox"
 )
 
-//Transfer represents Transfer rule
+
+type VariableExtractions []*VariableExtraction
+
+//ProcessedTransfers represents ProcessedTransfers rule
 type Transfer struct {
 	Name string
 
@@ -29,6 +32,18 @@ type Transfer struct {
 	nextRun *time.Time
 	running bool
 }
+
+func (t *Transfer) HasVariableExtraction() bool {
+	return len(t.VariableExtraction) > 0
+}
+
+
+//HasRecordLevelVariableExtraction returns true if variable has record level rule
+func (t *Transfer) HasRecordLevelVariableExtraction() bool {
+	var variableExtractions VariableExtractions = t.VariableExtraction
+	return variableExtractions.HasRecordSource()
+}
+
 
 //TransferConfig represents TransferConfig
 type TransferConfig struct {
@@ -163,7 +178,7 @@ func (t *Transfer) New(source, target, MetaURL string) *Transfer {
 	return result
 }
 
-//Clone creates a copy of the Transfer
+//Clone creates a copy of the ProcessedTransfers
 func (t *Transfer) Clone() *Transfer {
 	return &Transfer{
 		Name:                 t.Name,
@@ -190,8 +205,18 @@ type DataTypeMatch struct {
 type VariableExtraction struct {
 	Name    string
 	RegExpr string
-	Path    string // for record you need path
-	Source  string // sourceUrl, record
+	Provider string //provider name for source or target record type only
+	Source  string // sourceUrl, source, target (source or target refer to a data record)
+}
+
+
+func (e VariableExtractions) HasRecordSource() bool {
+	for _, item:=range e {
+		if item.Source  == "source"  || item.Source  == "target"{
+			return true
+		}
+	}
+	return false
 }
 
 // Host defines a host construct with IP/DNS and port
