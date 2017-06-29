@@ -15,6 +15,7 @@ import (
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
 
+
 const MaxStatusTaskCount = 10
 
 type Service struct {
@@ -67,6 +68,10 @@ func (s *Service) Start() error {
 		}
 	}()
 	return nil
+}
+
+func (s *Service) Version() string {
+	return Version
 }
 
 func (s *Service) Run() error {

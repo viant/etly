@@ -66,7 +66,14 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 			Handler:    service.transferObjectService.Transfer,
 			Parameters: []string{"request"},
 		},
+		toolbox.ServiceRouting{
+			HTTPMethod: "Get",
+			URI:        uriBasePath + "version",
+			Handler:    service.Version,
+			Parameters: []string{},
+		},
 	)
+	
 	http.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {
 		err := router.Route(writer, reader)
 		if err != nil {
