@@ -31,6 +31,11 @@ type TransferObjectService interface {
 	Transfer(request *TransferObjectRequest) *TransferObjectResponse
 }
 
+
+type PayloadAccessor interface {
+	SetPayload(payload string)
+}
+
 type transferObjectService struct {
 	taskRegistry *TaskRegistry
 }
@@ -56,6 +61,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get souce: %v %v", sourceURL, err))
 	}
+
 	reader, err := storageService.Download(source)
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to dowload: %v %v", sourceURL, err))
@@ -159,7 +165,14 @@ outer:
 		if err != nil {
 			return nil, fmt.Errorf("Failed to decode json: [%v] %v %v", i, err, line)
 		}
+
+
 		if predicate == nil || predicate.Apply(source) {
+
+
+			if payloadAccessor, ok := source.(PayloadAccessor);ok {
+				payloadAccessor.SetPayload(line)
+			}
 			target, err := transformer(source)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to transform %v", err)
