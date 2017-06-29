@@ -9,9 +9,9 @@ import (
 
 	"io"
 
+	"fmt"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
-	"fmt"
 )
 
 const timeVariableExpr = "<dateFormat:"
@@ -166,8 +166,6 @@ func appendContentObject(storageService storage.Service, folderUrl string, colle
 	return nil
 }
 
-
-
 func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction, source storage.Object) (map[string]string, error) {
 	var result = make(map[string]string)
 	for _, variableExtraction := range variableExtractionRules {
@@ -196,7 +194,6 @@ func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction
 	return result, nil
 }
 
-
 func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction, source, target interface{}) (map[string]string, error) {
 	var result = make(map[string]string)
 	for _, variableExtraction := range variableExtractionRules {
@@ -206,14 +203,14 @@ func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction
 		case "sourceurl":
 			//do nothing
 		case "source":
-			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Provider)
 			if err != nil {
 				return nil, err
 			}
 			value = provider(source)
 
 		case "target":
-			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Provider)
 			if err != nil {
 				return nil, err
 			}
@@ -223,12 +220,11 @@ func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction
 			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
 
 		}
-		result[variableExtraction.Name]  = value
+		result[variableExtraction.Name] = value
 
 	}
 	return result, nil
 }
-
 
 func expandVaiables(text string, variables map[string]string) string {
 	for k, v := range variables {
