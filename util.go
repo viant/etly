@@ -206,14 +206,14 @@ func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction
 		case "sourceurl":
 			//do nothing
 		case "source":
-			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Provider)
 			if err != nil {
 				return nil, err
 			}
 			value = provider(source)
 
 		case "target":
-			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Name)
+			provider, err := NewVariableProviderRegistry().Get(variableExtraction.Provider)
 			if err != nil {
 				return nil, err
 			}

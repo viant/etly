@@ -77,6 +77,7 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 	http.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {
 		err := router.Route(writer, reader)
 		if err != nil {
+			logger.Printf("Route Error: %v", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 		}
 	})
