@@ -351,7 +351,6 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
-		//
 		if errorURLMap[storageObject.URL()] {
 			continue
 		}
@@ -366,7 +365,6 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 
 	return meta, err
 }
-
 
 type WorkerProcessedTransferMeta struct {
 	ProcessedTransfers []*ProcessedTransfer
