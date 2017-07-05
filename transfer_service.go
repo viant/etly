@@ -341,25 +341,32 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	task.UpdateElapsed()
 
 	var buffer bytes.Buffer
+	errorURLMap := make(map[string]bool)
 	if len(status.Errors) > 0 {
 		for _, er := range status.Errors {
+			errorURLMap[er.Location] = true
 			buffer.WriteString(er.Error())
 			buffer.WriteByte('\n')
 		}
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
-		URIs = append(URIs, storageObject.URL())
+		//
+		if errorURLMap[storageObject.URL()] {
+			continue
+		}
 		meta.Processed[storageObject.URL()] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 			storageObject.URL(),
 			message,
-			buffer.String(),
+			"",
 			len(storageTransfer.StorageObjects),
 			0,
 			&startTime)
 	}
+
 	return meta, err
 }
+
 
 type WorkerProcessedTransferMeta struct {
 	ProcessedTransfers []*ProcessedTransfer
