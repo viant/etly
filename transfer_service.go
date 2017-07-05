@@ -38,9 +38,6 @@ type transferService struct {
 	transferObjectService TransferObjectService
 }
 
-
-
-
 func (s *transferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
 	defer func(error) {
@@ -164,7 +161,7 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		return nil, err
 	}
 
-	if ! transfer.HasVariableExtraction() {
+	if !transfer.HasVariableExtraction() {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
 			StorageObjects: candidates,
@@ -178,16 +175,13 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		return []*Meta{meta}, nil
 	}
 
-
-
-
 	result = make([]*Meta, 0)
 	storageTransfers, err := s.expandTransferWithVariableExpression(transfer, candidates)
 	if err != nil {
 		return nil, err
 	}
 	if transfer.MaxParallelTransfers == 0 {
-		transfer.MaxParallelTransfers = 4;
+		transfer.MaxParallelTransfers = 4
 	}
 	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers, len(storageTransfers))
 	for _, storageTransfer := range storageTransfers {
@@ -278,7 +272,7 @@ func (s *transferService) updateMetaStatus(meta *Meta, storageTransfer *StorageO
 		meta.AddError(fmt.Sprintf("%v", err))
 	}
 	if storageTransfer != nil && storageTransfer.IndexedStorageObjects != nil {
-		var sourceStatus= &ProcessingStatus{}
+		var sourceStatus = &ProcessingStatus{}
 
 		for source := range storageTransfer.IndexedStorageObjects {
 			if value, found := meta.Processed[source]; found {
@@ -345,11 +339,13 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		return nil, err
 	}
 	task.UpdateElapsed()
+
+	var buffer bytes.Buffer
 	if len(status.Errors) > 0 {
-		for i, er := range status.Errors {
-			fmt.Printf("ERR %v -> %v", i, er)
+		for _, er := range status.Errors {
+			buffer.WriteString(er.Error())
+			buffer.WriteByte('\n')
 		}
-		return nil, fmt.Errorf(status.Errors[0].Message)
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
@@ -357,7 +353,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		meta.Processed[storageObject.URL()] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 			storageObject.URL(),
 			message,
-			"",
+			buffer.String(),
 			len(storageTransfer.StorageObjects),
 			0,
 			&startTime)
@@ -367,9 +363,8 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 
 type WorkerProcessedTransferMeta struct {
 	ProcessedTransfers []*ProcessedTransfer
-	ObjectMeta        *ObjectMeta
+	ObjectMeta         *ObjectMeta
 }
-
 
 func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTransfer, task *TransferTask) (m *Meta, err error) {
 	transfer := storageTransfer.Transfer
@@ -439,7 +434,7 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 			if len(processedTransfers) > 0 {
 				workerProcessedTransferMeta = append(workerProcessedTransferMeta, &WorkerProcessedTransferMeta{
 					ProcessedTransfers: processedTransfers,
-					ObjectMeta:objectMeta,
+					ObjectMeta:         objectMeta,
 				})
 			}
 			defer limiter.Mutex.Unlock()
@@ -463,13 +458,12 @@ func (s *transferService) transferFromUrlToUrl(storageTransfer *StorageObjectTra
 
 }
 
-
-func (s *transferService) updateWorkerProcessedTransferMeta(workerProcessedTransferMetas []*WorkerProcessedTransferMeta, storageTransfer *StorageObjectTransfer)  {
+func (s *transferService) updateWorkerProcessedTransferMeta(workerProcessedTransferMetas []*WorkerProcessedTransferMeta, storageTransfer *StorageObjectTransfer) {
 	var resourcedMetas = make(map[string]*ResourcedMeta)
 	for _, workerProcessedTransferMeta := range workerProcessedTransferMetas {
 		for _, processedTransfer := range workerProcessedTransferMeta.ProcessedTransfers {
 			resourceMeta, found := resourcedMetas[processedTransfer.Transfer.Meta.Name]
-			if ! found {
+			if !found {
 				meta, err := s.LoadMeta(processedTransfer.Transfer.Meta)
 				if err != nil {
 					logger.Printf("Failed to load worker meta: %v ", err)
