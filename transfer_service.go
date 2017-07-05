@@ -348,6 +348,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 			buffer.WriteString(er.Error())
 			buffer.WriteByte('\n')
 		}
+		logger.Println(buffer.String())
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
