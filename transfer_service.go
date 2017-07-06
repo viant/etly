@@ -347,10 +347,21 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 			errorURLMap[er.Location] = true
 			buffer.WriteString(er.Error())
 			buffer.WriteByte('\n')
+			// Location can be shown as empty string
+			if er.Location == "" {
+				continue
+			}
+			if strings.Contains(er.Message , "Field:") {
+				// Log this to meta file so we can skip it next time.
+				meta.Processed[er.Location] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
+					er.Location,
+					"Error loading to GBQ",
+					er.Error(),
+					0,
+					0,
+					&startTime)
+			}
 		}
-		logger.Println(buffer.String())
-	}
-	if strings.Contains(buffer.String(), "Field") {
 		return nil, fmt.Errorf("Failed to upload: %v", buffer.String())
 	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
