@@ -350,11 +350,11 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 		}
 		logger.Println(buffer.String())
 	}
+	if strings.Contains(buffer.String(), "Field") {
+		return nil, fmt.Errorf("Failed to upload: %v", buffer.String())
+	}
 	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
-		if errorURLMap[storageObject.URL()] {
-			continue
-		}
 		meta.Processed[storageObject.URL()] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 			storageObject.URL(),
 			message,
