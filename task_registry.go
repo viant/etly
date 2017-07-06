@@ -43,7 +43,7 @@ func (t *TaskRegistry) Archive(task *Task) {
 	t.History = tasks
 }
 
-func findTask(candidates []*Task, mutex *sync.Mutex, result *[]*Task, requested map[string]bool) {
+func findTask(candidates []*Task, mutex sync.Locker, result *[]*Task, requested map[string]bool) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	for _, task := range candidates {
@@ -53,7 +53,7 @@ func findTask(candidates []*Task, mutex *sync.Mutex, result *[]*Task, requested 
 	}
 }
 
-func (t *TaskRegistry) GetByIds(ids ...string) []*Task {
+func (t *TaskRegistry) GetByIDs(ids ...string) []*Task {
 	var idMap = make(map[string]bool)
 	for _, id := range ids {
 		idMap[id] = true
@@ -65,7 +65,7 @@ func (t *TaskRegistry) GetByIds(ids ...string) []*Task {
 	return result
 }
 
-func appendTask(candidates []*Task, mutex *sync.Mutex, result *[]*Task) {
+func appendTask(candidates []*Task, mutex sync.Locker, result *[]*Task) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	*result = append(*result, candidates...)

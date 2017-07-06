@@ -2,8 +2,9 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
 	"sync/atomic"
+
+	"github.com/viant/toolbox"
 )
 
 type transferObjectServiceClient struct {
@@ -12,17 +13,23 @@ type transferObjectServiceClient struct {
 }
 
 func (c *transferObjectServiceClient) getNextHost() *Host {
-	var index = int(atomic.AddUint64(&c.index, 1)) % len(c.cluster)
+	index := int(atomic.AddUint64(&c.index, 1)) % len(c.cluster)
 	return c.cluster[index]
 }
 
-func (s *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
-	var response = &TransferObjectResponse{}
-	var host = s.getNextHost()
-	URL := string(fmt.Sprintf("http://%v:%v/etly/transfer", host.Server, host.Port))
-	err := toolbox.RouteToService("post", URL, request, &response)
+func (c *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
+	response := &TransferObjectResponse{}
+	host := c.getNextHost()
+	URL := fmt.Sprintf("http://%v:%v/etly/transfer", host.Server, host.Port)
+	err := toolbox.RouteToServiceWithCustomFormat("post", URL, request, response,
+		toolbox.NewJSONEncoderFactory(),
+		toolbox.NewJSONDecoderFactory(),
+		&toolbox.HttpOptions{Key: "TimeoutMs", Value: 240000})
 	if err != nil {
-		response.Error = fmt.Sprintf("Failed to route to service:  %v", URL)
+		response.Error = fmt.Sprintf("failed to route to service:  %v, transfer(%v), err: %v", URL, request.SourceURL, err)
+	}
+	if response.Error != "" {
+		response.Error = fmt.Sprintf("From host (%s), %s", URL, response.Error)
 	}
 	return response
 }

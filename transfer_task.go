@@ -14,8 +14,16 @@ type TransferTask struct {
 	Transfer *Transfer
 }
 
+// UpdateElapsed updates the elapsed time
 func (t *TransferTask) UpdateElapsed() {
-	atomic.StoreInt32(&t.Progress.ElapsedInSec, int32(time.Now().Unix()-t.Progress.startTime.Unix()))
+	atomic.StoreInt64(&t.Progress.ElapsedInSec, int64(time.Since(*t.Progress.startTime).Seconds()))
+}
+
+//NewTransferTaskForID create a new Transfer status
+func NewTransferTaskForID(id string, transfer *Transfer) *TransferTask {
+	result := NewTransferTask(transfer)
+	result.Id = id
+	return result
 }
 
 //NewTransferTask create a new Transfer status
@@ -28,18 +36,9 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 			StartDate: now.String(),
 		},
 	}
-
-	var task = &Task{
+	result.Task = &Task{
 		Id:       fmt.Sprintf("%v-%v-%v", transfer.Name, now.UnixNano(), rand.NewSource(now.UnixNano()).Int63()),
 		Progress: result.Progress,
 	}
-	result.Task = task
-	return result
-}
-
-//NewTransferTaskForId create a new Transfer status
-func NewTransferTaskForId(id string, transfer *Transfer) *TransferTask {
-	var result = NewTransferTask(transfer)
-	result.Id = id
 	return result
 }

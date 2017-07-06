@@ -5,43 +5,45 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
+
+	"github.com/klauspost/pgzip"
 )
 
-const (
-	GzipEncoding = "gzip"
-)
+const GzipEncoding = "gzip"
+
+type RawUnmarshaler interface {
+	RawUnmarshal(input []byte)
+}
+
+type RawMarshaler interface {
+	RawMarshal() []byte
+}
 
 func getEncodingReader(encoding string, reader io.Reader) (encodingReader io.Reader, err error) {
 	switch encoding {
 	case GzipEncoding:
-		content, err := ioutil.ReadAll(reader)
+		reader, err = pgzip.NewReader(reader)
 		if err != nil {
 			return nil, err
 		}
-		reader, err = gzip.NewReader(bytes.NewReader(content))
-		if err != nil {
-			return nil, err
-		}
-
-		content, err = ioutil.ReadAll(reader)
-		if err != nil {
-			return nil, err
-		}
-		return bytes.NewReader(content), nil
+		return reader, nil
 	case "":
 		return reader, nil
 	default:
-		return nil, fmt.Errorf("Unsupported encoding: %v", encoding)
+		return nil, fmt.Errorf("unsupported encoding: %v", encoding)
 	}
 }
 
-func encodeData(encoding string, data []byte) (io.Reader, error) {
+func encodeData(encoding string, data []byte) ([]byte, error) {
 	switch encoding {
 	case GzipEncoding:
 		buffer := new(bytes.Buffer)
-		writer := gzip.NewWriter(buffer)
-		_, err := writer.Write(data)
+		writer, err := pgzip.NewWriterLevel(buffer, gzip.BestSpeed)
+		if err != nil {
+			return nil, err
+		}
+		writer.SetConcurrency(100000, 32)
+		_, err = writer.Write(data)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +59,7 @@ func encodeData(encoding string, data []byte) (io.Reader, error) {
 		data = buffer.Bytes()
 		fallthrough
 	case "":
-		return bytes.NewReader(data), nil
+		return data, nil
 	default:
 		return nil, fmt.Errorf("Unsupported encoding: %v", encoding)
 	}
