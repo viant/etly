@@ -29,6 +29,8 @@ func TestGbqService_Load(t *testing.T) {
 		"gs://etly_test_errors/validjson1.gz",
 		"gs://etly_test_errors/invalidjson1.gz",
 		"gs://etly_test_errors/validjson2.gz",
+		"gs://etly_test_errors/invalidjson2.gz",
+		"gs://etly_test_errors/invalidjson3.gz",
 	}
 
 	job := &LoadJob{
@@ -42,6 +44,7 @@ func TestGbqService_Load(t *testing.T) {
 	status, msg, err := svc.Load(job)
 	t.Logf("Status: %+v\n", status)
 	t.Logf("Msg: %v\n", msg)
+	t.Logf("Possible Error: %v", status.Err().Error())
 	for _, failedJob := range status.Errors {
 		t.Logf("Error: %v\n", failedJob)
 	}
