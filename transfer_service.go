@@ -336,7 +336,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 	task.UpdateElapsed()
 	status, jobId, err := NewBigqueryService().Load(job)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to execute GBQ load job: %v", err)
 	}
 	task.UpdateElapsed()
 
@@ -351,7 +351,7 @@ func (s *transferService) transferFromUrlToDatastore(storageTransfer *StorageObj
 			if er.Location == "" {
 				continue
 			}
-			if strings.Contains(er.Message , "Field:") {
+			if strings.Contains(er.Message, "Field:") || strings.Contains(er.Message, "field:") {
 				// Log this to meta file so we can skip it next time.
 				meta.Processed[er.Location] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 					er.Location,
