@@ -22,7 +22,7 @@ func (c *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *
 	response := &TransferObjectResponse{}
 	host := c.getNextHost()
 	URL := fmt.Sprintf("http://%v:%v/etly/transfer", host.Server, host.Port)
-	err := toolbox.RouteToServiceWithCustomFormat("method", URL, request, response,
+	err := toolbox.RouteToServiceWithCustomFormat("post", URL, request, response,
 		toolbox.NewJSONEncoderFactory(),
 		toolbox.NewJSONDecoderFactory(),
 		&toolbox.HttpOptions{Key: "TimeoutMs", Value: time.Minute * 10})
