@@ -7,24 +7,24 @@ import (
 )
 
 var filterRegistry *FilterRegistry
-var filterRegistryMux = &sync.Mutex{}
 
 type FilterRegistry struct {
+	lock     sync.Mutex
 	registry map[string]toolbox.Predicate
 }
 
 func (r *FilterRegistry) Register(name string, predicate toolbox.Predicate) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
 	r.registry[name] = predicate
 }
 
 func NewFilterRegistry() *FilterRegistry {
-	filterRegistryMux.Lock()
-	defer filterRegistryMux.Unlock()
 	if filterRegistry != nil {
 		return filterRegistry
 	}
 	filterRegistry = &FilterRegistry{
-		make(map[string]toolbox.Predicate),
+		registry: make(map[string]toolbox.Predicate),
 	}
 	return filterRegistry
 }

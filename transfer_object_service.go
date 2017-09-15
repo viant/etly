@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"strings"
+	"time"
 )
 
 type TransferObjectRequest struct {
-	TaskId    string
+	TaskID    string
 	SourceURL string
 	Transfer  *Transfer
 }
@@ -21,7 +23,7 @@ type TransferObjectResponse struct {
 }
 
 type ProcessedTransfer struct {
-	Transfer *Transfer
+	Transfer        *Transfer
 	RecordProcessed int
 	RecordSkipped   int
 	Error           string
@@ -30,7 +32,6 @@ type ProcessedTransfer struct {
 type TransferObjectService interface {
 	Transfer(request *TransferObjectRequest) *TransferObjectResponse
 }
-
 
 type PayloadAccessor interface {
 	SetPayload(payload string)
@@ -41,14 +42,14 @@ type transferObjectService struct {
 }
 
 func (s *transferObjectService) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
-	var sourceURL = request.SourceURL
-	var transfer = request.Transfer
+	sourceURL := request.SourceURL
+	transfer := request.Transfer
 
 	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	if !hasProvider {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target))
 	}
-	task := NewTransferTaskForId(request.TaskId, transfer)
+	task := NewTransferTaskForID(request.TaskID, transfer)
 
 	s.taskRegistry.Register(task.Task)
 
@@ -67,21 +68,16 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to dowload: %v %v", sourceURL, err))
 	}
 
-	content, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to read : %v %v", sourceURL, err))
-	}
-	reader = bytes.NewReader(content)
 	reader, err = getEncodingReader(transfer.Source.Compression, reader)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to encoding reader : %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get encoding reader : %v %v", sourceURL, err))
 	}
-	content, err = ioutil.ReadAll(reader)
+	content, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to readall : %v %v", sourceURL, err))
 	}
 	if transfer.Source.DataFormat == "ndjson" {
-		var processedTransfers, err = s.transferObjectFromNewLineDelimiteredJson(content, transfer, task)
+		var processedTransfers, err = s.transferObjectFromNdjson(content, transfer, task)
 		task.Progress.FileProcessed++
 		var response = &TransferObjectResponse{
 			RecordProcessed: int(task.Progress.RecordProcessed),
@@ -98,12 +94,9 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 
 }
 
-
-
-
 func expandWorkerVariables(text string, transfer *Transfer, source, target interface{}) (string, error) {
 	if transfer.HasRecordLevelVariableExtraction() {
-		variables, err  := buildVariableWorkerServiceMap(transfer.VariableExtraction, source, target)
+		variables, err := buildVariableWorkerServiceMap(transfer.VariableExtraction, source, target)
 		if err != nil {
 			return "", err
 		}
@@ -113,65 +106,59 @@ func expandWorkerVariables(text string, transfer *Transfer, source, target inter
 	return text, nil
 }
 
-
-
 type TargetTransformation struct {
 	*ProcessedTransfer
 	targetRecords []string
-
 }
 
-
 func getTargetKey(transfer *Transfer, source, target interface{}) (string, error) {
+	if source == nil || target == nil {
+		return transfer.Target.Name, nil
+	}
 	if transfer.HasRecordLevelVariableExtraction() {
 		return expandWorkerVariables(transfer.Target.Name, transfer, source, target)
-
 	}
 	return transfer.Target.Name, nil
 }
 
-
-
-func (s *transferObjectService) transferObjectFromNewLineDelimiteredJson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
-	var result = make([]*ProcessedTransfer, 0)
-	provider := NewProviderRegistry().registry[transfer.Source.DataType]
+func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
+	result := make([]*ProcessedTransfer, 0)
+	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
-	var transformedTargets = make(map[string]*TargetTransformation)
-	var lines = strings.Split(string(source), "\n")
-	predicate, _ := NewFilterRegistry().registry[transfer.Filter]
-	var filtered = 0
+	transformedTargets := make(map[string]*TargetTransformation)
+	lines := bytes.Split(source, []byte("\n"))
+	predicate := NewFilterRegistry().registry[transfer.Filter]
+	filtered := 0
 
 outer:
-	for i, line := range lines {
+	for _, line := range lines {
 		if len(line) == 0 {
 			continue
 		}
+
 		if len(transfer.Source.DataTypeMatch) > 0 {
-			for _, sourceData := range transfer.Source.DataTypeMatch {
-				if strings.Contains(line, sourceData.MatchingFragment) {
-					if sourceData.DataType == "" {
+			for _, match := range transfer.Source.DataTypeMatch {
+				if bytes.Contains(line, []byte(match.MatchingFragment)) {
+					if match.DataType == "" {
+						// Skip to next line
 						continue outer
 					}
-					provider = NewProviderRegistry().registry[sourceData.DataType]
-					if provider == nil {
-						return nil, fmt.Errorf("Failed to lookup provider for match: %v %v", sourceData.MatchingFragment, sourceData.DataType)
+					dataTypeProvider = NewProviderRegistry().registry[match.DataType]
+					if dataTypeProvider == nil {
+						return nil, fmt.Errorf("Failed to lookup provider for match: %v %v", match.MatchingFragment, match.DataType)
 					}
+					break
 				}
 			}
 		}
-		var source = provider()
-
-		err := decodeJSONTarget(bytes.NewReader([]byte(line)), source)
+		source := dataTypeProvider()
+		err := decodeJSONTarget(line, source)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to decode json: [%v] %v %v", i, err, line)
+			return nil, fmt.Errorf("Failed to decode json: %v, %s", err, line)
 		}
-
-
 		if predicate == nil || predicate.Apply(source) {
-
-
-			if payloadAccessor, ok := source.(PayloadAccessor);ok {
-				payloadAccessor.SetPayload(line)
+			if payloadAccessor, ok := source.(PayloadAccessor); ok {
+				payloadAccessor.SetPayload(string(line))
 			}
 			target, err := transformer(source)
 			if err != nil {
@@ -182,30 +169,27 @@ outer:
 			if err != nil {
 				return nil, err
 			}
-			transformedObject := strings.Replace(string(buf.Bytes()), "\n", "", buf.Len())
-
-
-
-			targetKey, err := getTargetKey(transfer, source,  target)
+			transformedObject := bytes.Replace(buf.Bytes(), []byte("\n"), []byte(""), -1)
+			targetKey, err := getTargetKey(transfer, source, target)
 			if err != nil {
 				return nil, err
 			}
 			_, found := transformedTargets[targetKey]
-			if ! found {
+			if !found {
 				targetTransfer := transfer.Clone()
 				targetTransfer.Target.Name = targetKey
-				targetTransfer.Meta.Name, err  = expandWorkerVariables(targetTransfer.Meta.Name , transfer, source, target)
+				targetTransfer.Meta.Name, err = expandWorkerVariables(targetTransfer.Meta.Name, transfer, source, target)
 				if err != nil {
 					return nil, err
 				}
 				transformedTargets[targetKey] = &TargetTransformation{
-					targetRecords:make([]string, 0),
-					ProcessedTransfer:&ProcessedTransfer{
-						Transfer:targetTransfer,
+					targetRecords: make([]string, 0),
+					ProcessedTransfer: &ProcessedTransfer{
+						Transfer: targetTransfer,
 					},
 				}
 			}
-			transformedTargets[targetKey].targetRecords = append(transformedTargets[targetKey].targetRecords, transformedObject)
+			transformedTargets[targetKey].targetRecords = append(transformedTargets[targetKey].targetRecords, string(transformedObject))
 			task.Progress.RecordProcessed++
 			transformedTargets[targetKey].RecordProcessed++
 
@@ -216,9 +200,11 @@ outer:
 		task.UpdateElapsed()
 	}
 
+	startTime := time.Now()
 	if len(transformedTargets) > 0 {
 		for _, transformed := range transformedTargets {
-			reader, err := encodeData(transfer.Target.Compression, []byte(strings.Join(transformed.targetRecords, "\n")))
+			content := strings.Join(transformed.targetRecords, "\n")
+			compressedData, err := encodeData(transfer.Target.Compression, []byte(content))
 			if err != nil {
 				return nil, err
 			}
@@ -226,12 +212,21 @@ outer:
 			if err != nil {
 				return nil, err
 			}
-			err = storageService.Upload(transformed.ProcessedTransfer.Transfer.Target.Name, reader)
+			transferStartTime := time.Now()
+			err = storageService.Upload(transformed.ProcessedTransfer.Transfer.Target.Name, bytes.NewReader(compressedData))
+			elapsedSec := time.Since(transferStartTime).Seconds()
+			if elapsedSec > 30 {
+				log.Printf("Detected log upload %v: %v sec, err: %v\n", transfer.Target.Name, elapsedSec, err)
+			}
 			if err != nil {
-				return nil, fmt.Errorf("Failed to upload: %v %v", transfer.Target, err)
+				return nil, fmt.Errorf("failed to upload: %v %v", transfer.Target, err)
 			}
 			result = append(result, transformed.ProcessedTransfer)
 		}
+	}
+	elapsedSec := time.Since(startTime).Seconds()
+	if elapsedSec > 30 {
+		log.Printf("Detected log upload %v: %v sec\n", transfer.Target.Name, elapsedSec)
 	}
 	return result, nil
 }

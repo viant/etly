@@ -1,7 +1,7 @@
 package etly
 
 // Version of ETLY Framework
-const Version = "1.5-stable"
+const Version = "2.0-stable"
 
 func init() {
 	logger.Printf("ETLY version: %v\n", Version)

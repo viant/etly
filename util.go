@@ -1,6 +1,7 @@
 package etly
 
 import (
+	"bytes"
 	"hash/fnv"
 	"net/url"
 	"path"
@@ -10,6 +11,7 @@ import (
 	"io"
 
 	"fmt"
+
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
 )
@@ -126,34 +128,43 @@ func hash(text string) int {
 	return result
 }
 
-func decodeJSONTarget(reader io.Reader, target interface{}) error {
+func decodeJSONTarget(content []byte, target interface{}) error {
+	if v, ok := target.(RawUnmarshaler); ok {
+		v.RawUnmarshal(content)
+		return nil
+	}
+
 	var factory toolbox.DecoderFactory
 	if _, ok := target.(toolbox.UnMarshaler); ok {
 		factory = toolbox.NewUnMarshalerDecoderFactory()
 	} else {
 		factory = jsonDecoderFactory
 	}
-	return factory.Create(reader).Decode(target)
+	return factory.Create(bytes.NewReader(content)).Decode(target)
 }
 
-func encodeJSONSource(writer io.Writer, target interface{}) error {
+func encodeJSONSource(w io.Writer, target interface{}) error {
+	if v, ok := target.(RawMarshaler); ok {
+		_, err := w.Write(v.RawMarshal())
+		return err
+	}
 	var factory toolbox.EncoderFactory
 	if _, ok := target.(toolbox.Marshaler); ok {
 		factory = toolbox.NewMarshalerEncoderFactory()
 	} else {
 		factory = jsonEncoderFactory
 	}
-	return factory.Create(writer).Encode(target)
+	return factory.Create(w).Encode(target)
 }
 
-func appendContentObject(storageService storage.Service, folderUrl string, collection *[]storage.Object) error {
-	storageObjects, err := storageService.List(folderUrl)
+func appendContentObject(storageService storage.Service, folderURL string, collection *[]storage.Object) error {
+	storageObjects, err := storageService.List(folderURL)
 	if err != nil {
 		return err
 	}
 	for _, objectStorage := range storageObjects {
 		if objectStorage.IsFolder() {
-			if objectStorage.URL() != folderUrl {
+			if objectStorage.URL() != folderURL {
 				err = appendContentObject(storageService, objectStorage.URL(), collection)
 				if err != nil {
 					return err
@@ -172,13 +183,10 @@ func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction
 		var value = ""
 		switch strings.ToLower(variableExtraction.Source) {
 		case "sourceurl":
-
 			compiledExpression, err := compileRegExpr(variableExtraction.RegExpr)
-
 			if err != nil {
-				return nil, fmt.Errorf("Failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
+				return nil, fmt.Errorf("failed to build variable - unable to compile expr: %v due to %v", variableExtraction.RegExpr, err)
 			}
-
 			if compiledExpression.MatchString(source.URL()) {
 				matched := compiledExpression.FindStringSubmatch(source.URL())
 				value = matched[1]
@@ -187,7 +195,7 @@ func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction
 		case "source", "target":
 			//do nothing
 		default:
-			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
+			return nil, fmt.Errorf("unsupported source: %v", variableExtraction.Source)
 
 		}
 	}
@@ -197,7 +205,6 @@ func buildVariableMasterServiceMap(variableExtractionRules []*VariableExtraction
 func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction, source, target interface{}) (map[string]string, error) {
 	var result = make(map[string]string)
 	for _, variableExtraction := range variableExtractionRules {
-
 		var value = ""
 		switch strings.ToLower(variableExtraction.Source) {
 		case "sourceurl":
@@ -217,11 +224,9 @@ func buildVariableWorkerServiceMap(variableExtractionRules []*VariableExtraction
 			value = provider(target)
 
 		default:
-			return nil, fmt.Errorf("Unsupported source: %v", variableExtraction.Source)
-
+			return nil, fmt.Errorf("unsupported source: %v", variableExtraction.Source)
 		}
 		result[variableExtraction.Name] = value
-
 	}
 	return result, nil
 }

@@ -28,9 +28,6 @@ func SchemaFromFile(URL string) (bigquery.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 	return SchemaFromRaw(content)
 }
 

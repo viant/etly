@@ -2,19 +2,18 @@ package etly
 
 import (
 	"errors"
-	"github.com/viant/toolbox"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
-	"strings"
+
+	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
-	"fmt"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
-
 
 const MaxStatusTaskCount = 10
 
@@ -45,21 +44,20 @@ func (s *Service) Status() string {
 }
 
 func (s *Service) Start() error {
-	if !atomic.CompareAndSwapInt32(&s.isRunning, 0, 1) {
-		return errors.New("Service has been already started")
+	running := atomic.LoadInt32(&s.isRunning)
+	if running == 1 {
+		return errors.New("service has been already started")
 	}
-
 	go func() {
-		var sleepDuration = time.Second
+		atomic.StoreInt32(&s.isRunning, 1)
+		defer atomic.StoreInt32(&s.isRunning, 0)
+
+		tick := time.NewTicker(time.Second).C
 		for {
-			isRunning := atomic.LoadInt32(&s.isRunning)
-			if isRunning == 0 {
-				break
-			}
 			select {
 			case <-s.stopNotification:
 				break
-			case <-time.After(sleepDuration):
+			case <-tick:
 				err := s.Run()
 				if err != nil {
 					logger.Printf("Failed to Run status %v", err)
@@ -82,9 +80,9 @@ func (s *Service) Run() error {
 	for _, transfer := range s.transferConfig.Transfers {
 		go func(transfer *Transfer) {
 			now := time.Now()
-			if (transfer.nextRun == nil || transfer.nextRun.Unix() < now.Unix()) && !transfer.running {
-				transfer.running = true
-				defer transfer.reset()
+			if (transfer.nextRun == nil || transfer.nextRun.Before(now)) && !transfer.isRunning() {
+				transfer.setRunning(true)
+				defer transfer.setRunning(false)
 				err := transfer.scheduleNextRun(now)
 				if err != nil {
 					logger.Printf("Failed to schedule Transfer: %v %v", err, transfer)
@@ -98,6 +96,13 @@ func (s *Service) Run() error {
 					logger.Printf("Failed to Transfer: %v %v", err, transfer)
 					result = err
 				}
+				return
+			}
+			if transfer.nextRun == nil {
+				logger.Printf("Transfer nextRun: %v - %v\n", transfer.nextRun, transfer.Name)
+			}
+			if (transfer.nextRun.Unix() < now.Unix()) && transfer.running {
+				logger.Printf("Transfer running: %v - %v\n", transfer.running, transfer.Name)
 			}
 		}(transfer)
 	}
@@ -109,7 +114,7 @@ func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 	if len(ids) == 0 {
 		result = s.taskRegistry.GetAll()
 	} else {
-		result = s.taskRegistry.GetByIds(ids...)
+		result = s.taskRegistry.GetByIDs(ids...)
 	}
 	request.ParseForm()
 	offset := toolbox.AsInt(request.Form.Get("offset"))
@@ -139,7 +144,6 @@ func (s *Service) GetErrors() []*ObjectMeta {
 	return corruptedFiles
 }
 
-
 func (s *Service) getMetaObject(name string, metaResource Resource) ([]*Meta, error) {
 	parentUrlIndex := strings.LastIndex(metaResource.Name, "/")
 	if parentUrlIndex == -1 {
@@ -154,12 +158,12 @@ func (s *Service) getMetaObject(name string, metaResource Resource) ([]*Meta, er
 	appendContentObject(service, parentURL, &candidates)
 	var result = make([]*Meta, 0)
 	for _, candidate := range candidates {
-		if ! strings.Contains(candidate.URL(), name) {
+		if !strings.Contains(candidate.URL(), name) {
 			continue
 		}
 		metaResource.Name = candidate.URL()
 		meta, err := s.transferService.LoadMeta(&metaResource)
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 		result = append(result, meta)
@@ -180,11 +184,11 @@ func (s *Service) ProcessingStatus(name string) *StatusInfoResponse {
 	for _, metaResource := range metaResources {
 		metaList, err := s.getMetaObject(name, *metaResource)
 		if err != nil {
-			response.Error = fmt.Sprint("%v", err)
+			response.Error = err.Error()
 			return response
 		}
 
-		for _, meta:= range metaList {
+		for _, meta := range metaList {
 			if metaUrl[meta.URL] {
 				continue
 			}
@@ -200,8 +204,6 @@ func (s *Service) ProcessingStatus(name string) *StatusInfoResponse {
 	toolbox.ReverseSlice(response.Status)
 	return response
 }
-
-
 
 func (s *Service) Stop() {
 	atomic.StoreInt32(&s.isRunning, 0)

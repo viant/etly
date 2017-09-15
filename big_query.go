@@ -13,7 +13,7 @@ import (
 
 // BigqueryService provides loading capability from Cloud Storage to BigQuery
 type BigqueryService interface {
-	// Perform a load job. This method performs blocking operations so it is ideal
+	// Load performs a gbq loading job. This method is a blocking operation so it is ideal
 	// to be executed in a go routine.
 	Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error)
 }

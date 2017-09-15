@@ -1,6 +1,7 @@
 package etly
 
 import "time"
+import "sync"
 
 type ObjectMeta struct {
 	Source              string
@@ -21,12 +22,10 @@ func NewObjectMeta(source, target, message, err string, recordProcessed, recordS
 		RecordProcessed:     recordProcessed,
 		RecordSkipped:       recordSkipped,
 		Timestamp:           time.Now(),
-		ProcessingTimeInSec: int(time.Now().Unix() - starTime.Unix()),
+		ProcessingTimeInSec: int(time.Since(*starTime).Seconds()),
 		Error:               err,
 	}
 }
-
-
 
 type ProcessingStatus struct {
 	ResourceProcessed int
@@ -34,9 +33,8 @@ type ProcessingStatus struct {
 	RecordProcessed   int
 }
 
-
 type ResourcedMeta struct {
-	Meta *Meta
+	Meta     *Meta
 	Resource *Resource
 }
 
@@ -48,6 +46,7 @@ type Meta struct {
 	Errors              []*Error
 	ResourceStatus      map[string]*ProcessingStatus
 	Status              *ProcessingStatus
+	lock                sync.Mutex
 }
 
 func (m *Meta) PutStatus(source string, status *ProcessingStatus) {
@@ -65,9 +64,9 @@ func (m *Meta) PutStatus(source string, status *ProcessingStatus) {
 	m.Status = total
 }
 
-type Error struct{
+type Error struct {
 	Error string
-	Time time.Time
+	Time  time.Time
 }
 
 func (m *Meta) AddError(error string) {
@@ -75,8 +74,8 @@ func (m *Meta) AddError(error string) {
 		m.Errors = make([]*Error, 0)
 	}
 	m.Errors = append(m.Errors, &Error{
-		Error:error,
-		Time:time.Now(),
+		Error: error,
+		Time:  time.Now(),
 	})
 }
 

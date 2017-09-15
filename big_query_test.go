@@ -26,11 +26,10 @@ func TestGbqService_Load(t *testing.T) {
 		t.Fatalf("cannot load schema: %v", err)
 	}
 	URIs := []string{
-		"gs://etly_test_errors/validjson1.gz",
-		"gs://etly_test_errors/invalidjson1.gz",
-		"gs://etly_test_errors/validjson2.gz",
-		"gs://etly_test_errors/invalidjson2.gz",
-		"gs://etly_test_errors/invalidjson3.gz",
+		"gs://etly_test_errors/test/validjson01.gz",
+		"gs://etly_test_errors/test/invalidjson01.gz",
+		"gs://etly_test_errors/test/validjson02.gz",
+		"gs://etly_test_errors/test/invalidgzip01.gz",
 	}
 
 	job := &LoadJob{
@@ -44,7 +43,9 @@ func TestGbqService_Load(t *testing.T) {
 	status, msg, err := svc.Load(job)
 	t.Logf("Status: %+v\n", status)
 	t.Logf("Msg: %v\n", msg)
-	t.Logf("Possible Error: %v", status.Err().Error())
+	if status.Err() != nil {
+		t.Logf("Possible Error: %v", status.Err().Error())
+	}
 	for _, failedJob := range status.Errors {
 		t.Logf("Error: %v\n", failedJob)
 	}

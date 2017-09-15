@@ -8,5 +8,5 @@ type TransferProgress struct {
 	FileProcessed   int32
 	StartDate       string
 	startTime       *time.Time
-	ElapsedInSec    int32
+	ElapsedInSec    int64
 }

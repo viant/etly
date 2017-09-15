@@ -3,11 +3,11 @@ package etly
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/viant/toolbox"
 )
-
 
 type VariableExtractions []*VariableExtraction
 
@@ -31,19 +31,19 @@ type Transfer struct {
 
 	nextRun *time.Time
 	running bool
+
+	lock sync.Mutex
 }
 
 func (t *Transfer) HasVariableExtraction() bool {
 	return len(t.VariableExtraction) > 0
 }
 
-
 //HasRecordLevelVariableExtraction returns true if variable has record level rule
 func (t *Transfer) HasRecordLevelVariableExtraction() bool {
 	var variableExtractions VariableExtractions = t.VariableExtraction
 	return variableExtractions.HasRecordSource()
 }
-
 
 //TransferConfig represents TransferConfig
 type TransferConfig struct {
@@ -162,8 +162,16 @@ func (t *Transfer) scheduleNextRun(now time.Time) error {
 	return nil
 }
 
-func (t *Transfer) reset() {
-	t.running = false
+func (t *Transfer) isRunning() bool {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.running
+}
+
+func (t *Transfer) setRunning(running bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.running = running
 }
 
 func (t *Transfer) String() string {
@@ -203,16 +211,15 @@ type DataTypeMatch struct {
 
 //VariableExtraction represents variable extraction rule
 type VariableExtraction struct {
-	Name    string
-	RegExpr string
+	Name     string
+	RegExpr  string
 	Provider string //provider name for source or target record type only
-	Source  string // sourceUrl, source, target (source or target refer to a data record)
+	Source   string // sourceUrl, source, target (source or target refer to a data record)
 }
 
-
 func (e VariableExtractions) HasRecordSource() bool {
-	for _, item:=range e {
-		if item.Source  == "source"  || item.Source  == "target"{
+	for _, item := range e {
+		if item.Source == "source" || item.Source == "target" {
 			return true
 		}
 	}
