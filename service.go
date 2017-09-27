@@ -98,12 +98,6 @@ func (s *Service) Run() error {
 				}
 				return
 			}
-			if transfer.nextRun == nil {
-				logger.Printf("Transfer nextRun: %v - %v\n", transfer.nextRun, transfer.Name)
-			}
-			if (transfer.nextRun.Unix() < now.Unix()) && transfer.running {
-				logger.Printf("Transfer running: %v - %v\n", transfer.running, transfer.Name)
-			}
 		}(transfer)
 	}
 	return result

@@ -1,14 +1,11 @@
 package etly
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
 
-	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
 	"github.com/viant/toolbox/storage/aws"
 	"github.com/viant/toolbox/storage/gs"
@@ -53,12 +50,15 @@ func provideGCSStorage(credentialFile string) (storage.Service, error) {
 }
 
 func provideAWSStorage(credentialFile string) (storage.Service, error) {
-	if !strings.HasPrefix(credentialFile, "/") {
-		dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-		credentialFile = path.Join(dir, credentialFile)
-	}
 	s3config := &aws.Config{}
-	err := toolbox.LoadConfigFromUrl("file://"+credentialFile, s3config)
+	content, err := ioutil.ReadFile(credentialFile)
+	if err != nil {
+		return nil, err
+	}
+	json.Unmarshal(content, s3config)
+	if err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}

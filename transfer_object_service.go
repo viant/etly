@@ -42,6 +42,13 @@ type transferObjectService struct {
 }
 
 func (s *transferObjectService) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
+	defer func(t time.Time) {
+		duration := time.Since(t).Seconds()
+		if duration > 240 {
+			log.Printf("Request took longer than 4 min:\nFile: %v\nDuration: %v secs\n", request.SourceURL, duration)
+		}
+	}(time.Now())
+
 	sourceURL := request.SourceURL
 	transfer := request.Transfer
 
@@ -60,12 +67,12 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 
 	source, err := storageService.StorageObject(sourceURL)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get souce: %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get source: %v %v", sourceURL, err))
 	}
 
 	reader, err := storageService.Download(source)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to dowload: %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to download: %v %v", sourceURL, err))
 	}
 
 	reader, err = getEncodingReader(transfer.Source.Compression, reader)
@@ -74,7 +81,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	}
 	content, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to readall : %v %v", sourceURL, err))
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to ReadAll : %v %v", sourceURL, err))
 	}
 	if transfer.Source.DataFormat == "ndjson" {
 		var processedTransfers, err = s.transferObjectFromNdjson(content, transfer, task)
@@ -145,7 +152,7 @@ outer:
 					}
 					dataTypeProvider = NewProviderRegistry().registry[match.DataType]
 					if dataTypeProvider == nil {
-						return nil, fmt.Errorf("Failed to lookup provider for match: %v %v", match.MatchingFragment, match.DataType)
+						return nil, fmt.Errorf("failed to lookup provider for match: %v %v", match.MatchingFragment, match.DataType)
 					}
 					break
 				}
@@ -154,7 +161,7 @@ outer:
 		source := dataTypeProvider()
 		err := decodeJSONTarget(line, source)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to decode json: %v, %s", err, line)
+			return nil, fmt.Errorf("failed to decode json: %v, %s", err, line)
 		}
 		if predicate == nil || predicate.Apply(source) {
 			if payloadAccessor, ok := source.(PayloadAccessor); ok {
@@ -162,7 +169,7 @@ outer:
 			}
 			target, err := transformer(source)
 			if err != nil {
-				return nil, fmt.Errorf("Failed to transform %v", err)
+				return nil, fmt.Errorf("failed to transform %v", err)
 			}
 			buf := new(bytes.Buffer)
 			err = encodeJSONSource(buf, target)
@@ -200,7 +207,6 @@ outer:
 		task.UpdateElapsed()
 	}
 
-	startTime := time.Now()
 	if len(transformedTargets) > 0 {
 		for _, transformed := range transformedTargets {
 			content := strings.Join(transformed.targetRecords, "\n")
@@ -212,21 +218,15 @@ outer:
 			if err != nil {
 				return nil, err
 			}
-			transferStartTime := time.Now()
-			err = storageService.Upload(transformed.ProcessedTransfer.Transfer.Target.Name, bytes.NewReader(compressedData))
-			elapsedSec := time.Since(transferStartTime).Seconds()
-			if elapsedSec > 30 {
-				log.Printf("Detected log upload %v: %v sec, err: %v\n", transfer.Target.Name, elapsedSec, err)
-			}
+
+			//Disable MD5
+			fileName := transformed.ProcessedTransfer.Transfer.Target.Name + "?disableMD5=true"
+			err = storageService.Upload(fileName, bytes.NewReader(compressedData))
 			if err != nil {
 				return nil, fmt.Errorf("failed to upload: %v %v", transfer.Target, err)
 			}
 			result = append(result, transformed.ProcessedTransfer)
 		}
-	}
-	elapsedSec := time.Since(startTime).Seconds()
-	if elapsedSec > 30 {
-		log.Printf("Detected log upload %v: %v sec\n", transfer.Target.Name, elapsedSec)
 	}
 	return result, nil
 }

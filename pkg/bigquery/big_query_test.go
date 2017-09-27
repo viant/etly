@@ -1,4 +1,4 @@
-package etly
+package bigquery
 
 import (
 	"log"
@@ -20,7 +20,7 @@ func TestGbqService_Load(t *testing.T) {
 
 	// Change credential to match local secret
 	credential := gopath + "/src/github.com/viant/etly/test/secret/bq-upload_secret.json"
-	svc := NewBigqueryService()
+	svc := New()
 	schema, err := SchemaFromFile("file://.../test/data/schema/SampleSchema.json")
 	if err != nil {
 		t.Fatalf("cannot load schema: %v", err)

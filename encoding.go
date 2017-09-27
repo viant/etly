@@ -9,7 +9,10 @@ import (
 	"github.com/klauspost/pgzip"
 )
 
-const GzipEncoding = "gzip"
+// All supported encoding types
+const (
+	GzipEncoding = "gzip"
+)
 
 type RawUnmarshaler interface {
 	RawUnmarshal(input []byte)
@@ -47,20 +50,19 @@ func encodeData(encoding string, data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		err = writer.Flush()
 		if err != nil {
-			return nil, fmt.Errorf("Failed to encode data (flush) %v", err)
+			return nil, fmt.Errorf("failed to encode data (flush) %v", err)
 		}
 		err = writer.Close()
 		if err != nil {
-			return nil, fmt.Errorf("Failed to encode data (close) %v", err)
+			return nil, fmt.Errorf("failed to encode data (close) %v", err)
 		}
 		data = buffer.Bytes()
 		fallthrough
 	case "":
 		return data, nil
 	default:
-		return nil, fmt.Errorf("Unsupported encoding: %v", encoding)
+		return nil, fmt.Errorf("unsupported encoding: %v", encoding)
 	}
 }

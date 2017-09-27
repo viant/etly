@@ -2,14 +2,16 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
-	"log"
 	"net/http"
+	"net/http/pprof"
+
+	"github.com/viant/toolbox"
 )
 
 const uriBasePath = "/etly/"
 
 type Server struct {
+	mux     *http.ServeMux
 	config  *ServerConfig
 	Service *Service
 }
@@ -21,7 +23,7 @@ func (s *Server) Start() (err error) {
 	}
 	defer s.Service.Stop()
 	logger.Printf("Starting ETL service on port %v", s.config.Port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), nil))
+	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), s.mux))
 	return nil
 }
 
@@ -30,11 +32,6 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 	if err != nil {
 		return nil, err
 	}
-	var result = &Server{
-		config:  config,
-		Service: service,
-	}
-
 	router := toolbox.NewServiceRouter(
 		toolbox.ServiceRouting{
 			HTTPMethod: "GET",
@@ -73,13 +70,25 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 			Parameters: []string{},
 		},
 	)
-
-	http.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(uriBasePath, func(writer http.ResponseWriter, reader *http.Request) {
 		err := router.Route(writer, reader)
 		if err != nil {
 			logger.Printf("Route Error: %v", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 		}
 	})
+
+	if !config.Production {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	}
+	result := &Server{
+		mux:     mux,
+		config:  config,
+		Service: service,
+	}
 	return result, nil
 }

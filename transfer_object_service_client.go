@@ -7,6 +7,16 @@ import (
 	"github.com/viant/toolbox"
 )
 
+var toolboxClient *toolbox.ToolboxHTTPClient
+
+func init() {
+	var err error
+	toolboxClient, err = toolbox.NewToolboxHTTPClient(&toolbox.HttpOptions{Key: "TimeoutMs", Value: 240000})
+	if err != nil {
+		panic(err)
+	}
+}
+
 type transferObjectServiceClient struct {
 	cluster []*Host
 	index   uint64
@@ -21,10 +31,9 @@ func (c *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *
 	response := &TransferObjectResponse{}
 	host := c.getNextHost()
 	URL := fmt.Sprintf("http://%v:%v/etly/transfer", host.Server, host.Port)
-	err := toolbox.RouteToServiceWithCustomFormat("post", URL, request, response,
+	err := toolboxClient.Request("post", URL, request, response,
 		toolbox.NewJSONEncoderFactory(),
-		toolbox.NewJSONDecoderFactory(),
-		&toolbox.HttpOptions{Key: "TimeoutMs", Value: 240000})
+		toolbox.NewJSONDecoderFactory())
 	if err != nil {
 		response.Error = fmt.Sprintf("failed to route to service:  %v, transfer(%v), err: %v", URL, request.SourceURL, err)
 	}
