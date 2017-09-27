@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/viant/etly/pkg/bigquery"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
 )
@@ -333,7 +334,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	if len(resourceFragments) != 2 {
 		return nil, fmt.Errorf("Invalid resource , the supported:  bg://project/datset.table")
 	}
-	schema, err := SchemaFromFile(target.Schema.Name)
+	schema, err := bigquery.SchemaFromFile(target.Schema.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +343,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		URIs = append(URIs, storageObject.URL())
 		atomic.AddInt32(&task.Progress.FileProcessed, 1)
 	}
-	job := &LoadJob{
+	job := &bigquery.LoadJob{
 		Credential: storageTransfer.Transfer.Target.CredentialFile,
 		TableID:    resourceFragments[1],
 		DatasetID:  resourceFragments[0],
@@ -352,7 +353,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	}
 	task.UpdateElapsed()
 	logger.Printf("Loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
-	status, jobId, err := NewBigqueryService().Load(job)
+	status, jobId, err := bigquery.New().Load(job)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to execute GBQ load job: %v", err)
 	}
@@ -417,7 +418,6 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 		}
 	}()
 
-	var now = time.Now()
 	var source = transfer.Source.Name
 	var target = transfer.Target
 	var metaUrl = transfer.Meta.Name
@@ -430,17 +430,14 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 		transfer.MaxParallelTransfers = 4
 	}
 	limiter := toolbox.NewBatchLimiter(transfer.MaxParallelTransfers, len(candidates))
-	//var wg sync.WaitGroup
 	var transferMetaLock sync.Mutex
 	workerProcessedTransferMeta := make([]*WorkerProcessedTransferMeta, 0)
 
 	var currentTransfers int32
 	for _, candidate := range candidates {
-		//wg.Add(1)
 		go func(limiter *toolbox.BatchLimiter, candidate storage.Object, transferSource *Transfer) {
 			limiter.Acquire()
 			defer limiter.Done()
-			//defer wg.Done()
 			targetTransfer := transferSource.New(source, target.Name, metaUrl)
 
 			targetTransfer.Target.Name = expandModExpressionIfPresent(transferSource.Target.Name, hash(candidate.URL()))
@@ -471,7 +468,6 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 			atomic.AddInt32(&task.Progress.RecordSkipped, int32(recordSkipped))
 			atomic.AddInt32(&task.Progress.FileProcessed, 1)
 			atomic.AddInt32(&currentTransfers, 1)
-			//limiter.Mutex.Lock()
 			transferMetaLock.Lock()
 			if len(processedTransfers) > 0 {
 				workerProcessedTransferMeta = append(workerProcessedTransferMeta, &WorkerProcessedTransferMeta{
@@ -479,7 +475,6 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 					ObjectMeta:         objectMeta,
 				})
 			}
-			//defer limiter.Mutex.Unlock()
 			meta.Processed[candidate.URL()] = objectMeta
 			transferMetaLock.Unlock()
 		}(limiter, candidate, transfer)
@@ -488,17 +483,13 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 	if len(workerProcessedTransferMeta) > 0 {
 		s.updateWorkerProcessedTransferMeta(workerProcessedTransferMeta, storageTransfer)
 	}
-	//wg.Wait()
 	limiter.Wait()
 	if err != nil {
 		return nil, err
 	}
 	task.UpdateElapsed()
-	meta.RecentTransfers = int(currentTransfers)
-	meta.ProcessingTimeInSec = int(time.Now().Unix() - now.Unix())
-	logger.Printf("Completed: [%v] %v files in %v sec (processed so far: %v) \n", transfer.Name, len(candidates), meta.ProcessingTimeInSec, len(meta.Processed))
+	logger.Printf("Completed: [%v] %v files (processed so far: %v) \n", transfer.Name, len(candidates), len(meta.Processed))
 	return meta, err
-
 }
 
 func (s *transferService) updateWorkerProcessedTransferMeta(workerProcessedTransferMetas []*WorkerProcessedTransferMeta, storageTransfer *StorageObjectTransfer) {

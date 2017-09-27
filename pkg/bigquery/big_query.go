@@ -1,4 +1,4 @@
-package etly
+package bigquery
 
 import (
 	"bytes"
@@ -11,8 +11,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// BigqueryService provides loading capability from Cloud Storage to BigQuery
-type BigqueryService interface {
+// Service provides loading capability from Cloud Storage to BigQuery
+type Service interface {
 	// Load performs a gbq loading job. This method is a blocking operation so it is ideal
 	// to be executed in a go routine.
 	Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error)
@@ -31,15 +31,16 @@ type LoadJob struct {
 }
 
 const (
-	// e.g key1--val1__key2--val2__key3--val3__.....
-	KeyValueSeparator = "--"
-	PairSeparator     = "__"
-
+	// KVSeparator is a key-value separator e.g key1--val1__key2--val2__key3--val3__.....
+	KVSeparator = "--"
+	// PairSeparator is a separator for each K-V pair e.g key1--val1__key2--val2__key3--val3__.....
+	PairSeparator = "__"
+	// ErrorDuplicate contains text indicating GBQ Duplication Error
 	ErrorDuplicate = "Error 409"
 )
 
-// NewBigqueryService constructs a bigquery service
-func NewBigqueryService() BigqueryService {
+// New constructs a bigquery service
+func New() Service {
 	return &gbqService{}
 }
 
@@ -91,7 +92,7 @@ func (sv *gbqService) generateJobID(kv ...string) string {
 	var buffer bytes.Buffer
 	for i := 0; i < len(kv); i += 2 {
 		buffer.WriteString(kv[i])
-		buffer.WriteString(KeyValueSeparator)
+		buffer.WriteString(KVSeparator)
 		if i+1 < len(kv) {
 			buffer.WriteString(kv[i+1])
 		}

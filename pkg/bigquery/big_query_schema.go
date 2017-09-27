@@ -1,4 +1,4 @@
-package etly
+package bigquery
 
 import (
 	"encoding/json"
@@ -9,12 +9,12 @@ import (
 	"github.com/viant/toolbox"
 )
 
-// BigqueryField is a custom bigquery schema that is compatible with current Adserver implementation
-type BigqueryField struct {
-	Name   string           `json:"name"`
-	Type   string           `json:"type"`
-	Fields []*BigqueryField `json:"fields,omitempty"`
-	Mode   string           `json:"mode,omitempty"`
+// Field is a custom bigquery schema that is compatible with current Adserver implementation
+type Field struct {
+	Name   string   `json:"name"`
+	Type   string   `json:"type"`
+	Fields []*Field `json:"fields,omitempty"`
+	Mode   string   `json:"mode,omitempty"`
 }
 
 // SchemaFromFile reads schema from a file
@@ -33,7 +33,7 @@ func SchemaFromFile(URL string) (bigquery.Schema, error) {
 
 // SchemaFromRaw reads schema from raw slice of bytes
 func SchemaFromRaw(content []byte) (bigquery.Schema, error) {
-	fields := make([]*BigqueryField, 0)
+	fields := make([]*Field, 0)
 	err := json.Unmarshal(content, &fields)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func SchemaFromRaw(content []byte) (bigquery.Schema, error) {
 }
 
 // Convert custom json schema to bigquery compatible schema.
-func convertSchema(fieldSchema *BigqueryField) *bigquery.FieldSchema {
+func convertSchema(fieldSchema *Field) *bigquery.FieldSchema {
 	newFieldSchema := &bigquery.FieldSchema{}
 	newFieldSchema.Name = fieldSchema.Name
 

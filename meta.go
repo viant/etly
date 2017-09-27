@@ -4,26 +4,24 @@ import "time"
 import "sync"
 
 type ObjectMeta struct {
-	Source              string
-	Target              string
-	RecordProcessed     int
-	RecordSkipped       int
-	Timestamp           time.Time
-	ProcessingTimeInSec int
-	Message             string
-	Error               string
+	Source          string
+	Target          string
+	RecordProcessed int
+	RecordSkipped   int
+	Timestamp       time.Time
+	Message         string
+	Error           string
 }
 
 func NewObjectMeta(source, target, message, err string, recordProcessed, recordSkipped int, starTime *time.Time) *ObjectMeta {
 	return &ObjectMeta{
-		Source:              source,
-		Target:              target,
-		Message:             message,
-		RecordProcessed:     recordProcessed,
-		RecordSkipped:       recordSkipped,
-		Timestamp:           time.Now(),
-		ProcessingTimeInSec: int(time.Since(*starTime).Seconds()),
-		Error:               err,
+		Source:          source,
+		Target:          target,
+		Message:         message,
+		RecordProcessed: recordProcessed,
+		RecordSkipped:   recordSkipped,
+		Timestamp:       time.Now(),
+		Error:           err,
 	}
 }
 
@@ -39,14 +37,12 @@ type ResourcedMeta struct {
 }
 
 type Meta struct {
-	URL                 string
-	Processed           map[string]*ObjectMeta
-	ProcessingTimeInSec int
-	RecentTransfers     int
-	Errors              []*Error
-	ResourceStatus      map[string]*ProcessingStatus
-	Status              *ProcessingStatus
-	lock                sync.Mutex
+	URL            string
+	Processed      map[string]*ObjectMeta
+	Errors         []*Error
+	ResourceStatus map[string]*ProcessingStatus
+	Status         *ProcessingStatus
+	lock           sync.Mutex
 }
 
 func (m *Meta) PutStatus(source string, status *ProcessingStatus) {
@@ -55,7 +51,7 @@ func (m *Meta) PutStatus(source string, status *ProcessingStatus) {
 	}
 	m.ResourceStatus[source] = status
 
-	var total = &ProcessingStatus{}
+	total := &ProcessingStatus{}
 	for _, sourceStatus := range m.ResourceStatus {
 		total.ResourceProcessed += sourceStatus.ResourceProcessed
 		total.ResourcePending += sourceStatus.ResourcePending
@@ -69,12 +65,12 @@ type Error struct {
 	Time  time.Time
 }
 
-func (m *Meta) AddError(error string) {
+func (m *Meta) AddError(err string) {
 	if len(m.Errors) == 0 {
 		m.Errors = make([]*Error, 0)
 	}
 	m.Errors = append(m.Errors, &Error{
-		Error: error,
+		Error: err,
 		Time:  time.Now(),
 	})
 }

@@ -11,28 +11,22 @@ import (
 
 type VariableExtractions []*VariableExtraction
 
-//ProcessedTransfers represents ProcessedTransfers rule
+//Transfer represents a transfer rule
 type Transfer struct {
-	Name string
-
-	Source *Source
-	Target *Target
-	Meta   *Resource
-
-	TimeWindow *Duration
-	Frequency  *Duration
-
+	Name                 string
+	Source               *Source
+	Target               *Target
+	Meta                 *Resource
+	TimeWindow           *Duration
+	Frequency            *Duration
 	MaxParallelTransfers int
 	MaxTransfers         int
-
-	Transformer        string //name of registered transformer
-	Filter             string //name of registered filter predicate
-	VariableExtraction []*VariableExtraction
-
-	nextRun *time.Time
-	running bool
-
-	lock sync.Mutex
+	Transformer          string //name of registered transformer
+	Filter               string //name of registered filter predicate
+	VariableExtraction   VariableExtractions
+	nextRun              *time.Time
+	running              bool
+	lock                 sync.Mutex
 }
 
 func (t *Transfer) HasVariableExtraction() bool {
@@ -41,8 +35,7 @@ func (t *Transfer) HasVariableExtraction() bool {
 
 //HasRecordLevelVariableExtraction returns true if variable has record level rule
 func (t *Transfer) HasRecordLevelVariableExtraction() bool {
-	var variableExtractions VariableExtractions = t.VariableExtraction
-	return variableExtractions.HasRecordSource()
+	return t.VariableExtraction.HasRecordSource()
 }
 
 //TransferConfig represents TransferConfig
@@ -55,7 +48,6 @@ type Resource struct {
 	Type           string //url,datastore
 	DataFormat     string //nd_json,json
 	Compression    string //gzip
-	Encoding       string
 	CredentialFile string
 }
 
@@ -68,7 +60,6 @@ func (r *Resource) Clone() *Resource {
 		Type:           r.Type,
 		DataFormat:     r.DataFormat,
 		Compression:    r.Compression,
-		Encoding:       r.Encoding,
 		CredentialFile: r.CredentialFile,
 	}
 }
@@ -186,7 +177,7 @@ func (t *Transfer) New(source, target, MetaURL string) *Transfer {
 	return result
 }
 
-//Clone creates a copy of the ProcessedTransfers
+//Clone creates a copy of the Transfer
 func (t *Transfer) Clone() *Transfer {
 	return &Transfer{
 		Name:                 t.Name,
@@ -234,8 +225,9 @@ type Host struct {
 
 //ServerConfig ETL config
 type ServerConfig struct {
-	Port    int
-	Cluster []*Host
+	Production bool
+	Port       int
+	Cluster    []*Host
 }
 
 //NewServerConfigFromURL creates a new config from URL
