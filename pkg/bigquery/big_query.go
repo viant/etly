@@ -66,7 +66,7 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	}
 	ref.SourceFormat = bigquery.JSON
 	dataset := client.DatasetInProject(loadJob.ProjectID, loadJob.DatasetID)
-	if err := dataset.Create(ctx); err != nil {
+	if err := dataset.Create(ctx, nil); err != nil {
 		// Create dataset if it does exist, otherwise ignore duplicate error
 		if !strings.Contains(err.Error(), ErrorDuplicate) {
 			return nil, jobID, err
