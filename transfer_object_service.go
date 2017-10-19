@@ -60,7 +60,6 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 			log.Printf("Request took longer than 4 min:\nFile: %v\nDuration: %v secs\n", request.SourceURL, duration)
 		}
 	}(time.Now())
-
 	sourceURL := request.SourceURL
 	transfer := request.Transfer
 
@@ -104,7 +103,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		}
 		response.ProcessedTransfers = processedTransfers
 		if err != nil {
-			response.Error = fmt.Sprintf("%v", err)
+			response.Error = fmt.Sprintf("hostname: %s, %v", hostName, err)
 		}
 		return response
 
