@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 	"time"
 )
@@ -41,6 +42,17 @@ type transferObjectService struct {
 	taskRegistry *TaskRegistry
 }
 
+var hostName string
+
+func init() {
+	// Extract hostname to propragate up errors
+	var err error
+	hostName, err = os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (s *transferObjectService) Transfer(request *TransferObjectRequest) *TransferObjectResponse {
 	defer func(t time.Time) {
 		duration := time.Since(t).Seconds()
@@ -48,7 +60,6 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 			log.Printf("Request took longer than 4 min:\nFile: %v\nDuration: %v secs\n", request.SourceURL, duration)
 		}
 	}(time.Now())
-
 	sourceURL := request.SourceURL
 	transfer := request.Transfer
 
@@ -92,7 +103,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		}
 		response.ProcessedTransfers = processedTransfers
 		if err != nil {
-			response.Error = fmt.Sprintf("%v", err)
+			response.Error = fmt.Sprintf("hostname: %s, %v", hostName, err)
 		}
 		return response
 
@@ -239,6 +250,6 @@ func newtransferObjectService(taskRegistry *TaskRegistry) TransferObjectService 
 
 func NewErrorTransferObjectResponse(message string) *TransferObjectResponse {
 	return &TransferObjectResponse{
-		Error: message,
+		Error: "host:" + hostName + ", " + message,
 	}
 }
