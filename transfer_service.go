@@ -450,7 +450,16 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 			var errMessage string
 			if e != nil {
 				errMessage = e.Error()
-				if e != gzip.ErrChecksum {
+				if strings.Contains(errMessage, "failed to decode json") && ! strings.Contains(errMessage, "reached max errors") {
+					//let this file be processed
+					if len(meta.Errors) == 0 {
+						meta.Errors = make([]*Error, 0)
+					}
+					meta.Errors = append(meta.Errors, &Error{
+						Error:errMessage,
+						Time:time.Now(),
+					})
+				} else if e != gzip.ErrChecksum {
 					logger.Printf("Failed to targetTransfer: %v \n", e)
 					err = e
 					return

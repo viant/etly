@@ -24,6 +24,7 @@ type Transfer struct {
 	Transformer          string //name of registered transformer
 	Filter               string //name of registered filter predicate
 	VariableExtraction   VariableExtractions
+	MaxErrorCounts       *int//maximum of errors that will stop process a file, if nil will process all file.
 	nextRun              *time.Time
 	running              bool
 	lock                 sync.Mutex

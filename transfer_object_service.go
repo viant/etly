@@ -27,6 +27,7 @@ type ProcessedTransfer struct {
 	Transfer        *Transfer
 	RecordProcessed int
 	RecordSkipped   int
+	RecordErrors    int
 	Error           string
 }
 
@@ -103,7 +104,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		}
 		response.ProcessedTransfers = processedTransfers
 		if err != nil {
-			response.Error = fmt.Sprintf("hostname: %s, %v", hostName, err)
+			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name,  err)
 		}
 		return response
 
@@ -147,6 +148,8 @@ func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer
 	lines := bytes.Split(source, []byte("\n"))
 	predicate := NewFilterRegistry().registry[transfer.Filter]
 	filtered := 0
+	var decodingError error
+	var decodingErrorCount = 0
 
 outer:
 	for _, line := range lines {
@@ -172,8 +175,14 @@ outer:
 		source := dataTypeProvider()
 		err := decodeJSONTarget(line, source)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode json: %v, %s", err, line)
+			decodingErrorCount++
+			decodingError = fmt.Errorf("failed to decode json (%v times): %v, %s", decodingErrorCount, err, line)
+			if transfer.MaxErrorCounts != nil && decodingErrorCount >= *transfer.MaxErrorCounts {
+				return nil, fmt.Errorf("reached max errors %v",decodingError)
+			}
+			continue
 		}
+
 		if predicate == nil || predicate.Apply(source) {
 			if payloadAccessor, ok := source.(PayloadAccessor); ok {
 				payloadAccessor.SetPayload(string(line))
@@ -210,6 +219,7 @@ outer:
 			transformedTargets[targetKey].targetRecords = append(transformedTargets[targetKey].targetRecords, string(transformedObject))
 			task.Progress.RecordProcessed++
 			transformedTargets[targetKey].RecordProcessed++
+			transformedTargets[targetKey].RecordErrors = decodingErrorCount
 
 		} else {
 			task.Progress.RecordSkipped++
@@ -239,7 +249,7 @@ outer:
 			result = append(result, transformed.ProcessedTransfer)
 		}
 	}
-	return result, nil
+	return result, decodingError
 }
 
 func newtransferObjectService(taskRegistry *TaskRegistry) TransferObjectService {

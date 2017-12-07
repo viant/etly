@@ -10,6 +10,7 @@ import (
 	"github.com/viant/etly"
 	"github.com/viant/toolbox"
 	"time"
+	"strings"
 )
 
 type Log1 struct {
@@ -75,5 +76,10 @@ func TestService_Run(t *testing.T) {
 	response := s.ProcessingStatus("meta")
 	assert.Equal(t, "", response.Error)
 	assert.Equal(t, 4, response.Status[0].Status.RecordProcessed)
+	assert.Equal(t, 1, len(response.Status[0].Errors))
+
+	
+	assert.True(t, strings.Contains(response.Status[0].Errors[0].Error, "failed to decode json (1 times): unexpected EOF, {\"werwe:"))
+
 
 }
