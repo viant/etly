@@ -24,10 +24,11 @@ type Transfer struct {
 	Transformer          string //name of registered transformer
 	Filter               string //name of registered filter predicate
 	VariableExtraction   VariableExtractions
-	MaxErrorCounts       *int//maximum of errors that will stop process a file, if nil will process all file.
+	MaxErrorCounts       *int //maximum of errors that will stop process a file, if nil will process all file.
 	nextRun              *time.Time
 	running              bool
 	lock                 sync.Mutex
+	TimeOut              *Duration //Configured timeout for a transfer
 }
 
 func (t *Transfer) HasVariableExtraction() bool {
@@ -132,6 +133,8 @@ func (d *Duration) TimeUnit() (time.Duration, error) {
 		return time.Minute, nil
 	case "sec":
 		return time.Second, nil
+	case "milli":
+		return time.Millisecond, nil
 	}
 	return 0, fmt.Errorf("Unsupported time unit %v", d.Unit)
 }
@@ -229,6 +232,7 @@ type ServerConfig struct {
 	Production bool
 	Port       int
 	Cluster    []*Host
+	TimeOut    *Duration //Configured timeout for a request from a server
 }
 
 //NewServerConfigFromURL creates a new config from URL
