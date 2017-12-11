@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/viant/etly"
 	"github.com/viant/toolbox"
-	"time"
 	"strings"
+	"time"
 )
 
 type Log1 struct {
@@ -52,14 +52,17 @@ func TestService_Run(t *testing.T) {
 		defer os.Remove(file)
 	}
 
-
 	var serverConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/server_config.json"
 	serverConfig, err := etly.NewServerConfigFromURL(serverConfigUrl)
 	assert.Nil(t, err)
+	assert.Equal(t, 300, serverConfig.TimeOut.Duration, "serverConfig.TimeOut.Duration")
+	assert.Equal(t, "milli", serverConfig.TimeOut.Unit, "serverConfig.TimeOut.Unit")
 
 	var transferConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/transfer_config.json"
 	transferConfig, err := etly.NewTransferConfigFromURL(transferConfigUrl)
 	assert.Nil(t, err)
+	assert.Equal(t, 300, transferConfig.Transfers[0].TimeOut.Duration, "transferConfig.TimeOut.Duration")
+	assert.Equal(t, "milli", transferConfig.Transfers[0].TimeOut.Unit, "transferConfig.TimeOut.Unit")
 
 	s, err := etly.NewService(serverConfig, transferConfig)
 	if err != nil {
@@ -67,7 +70,7 @@ func TestService_Run(t *testing.T) {
 	}
 	err = s.Run()
 
-	time.Sleep(1 *time.Second)
+	time.Sleep(1 * time.Second)
 	for _, file := range files {
 		assert.True(t, toolbox.FileExists(file))
 	}
@@ -78,8 +81,6 @@ func TestService_Run(t *testing.T) {
 	assert.Equal(t, 4, response.Status[0].Status.RecordProcessed)
 	assert.Equal(t, 1, len(response.Status[0].Errors))
 
-	
 	assert.True(t, strings.Contains(response.Status[0].Errors[0].Error, "failed to decode json (1 times): unexpected EOF, {\"werwe:"))
-
 
 }

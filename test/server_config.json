@@ -1,4 +1,8 @@
 {
 
-  "Port": 8081
+  "Port": 8081,
+  "TimeOut": {
+    "Duration": 300,
+    "Unit": "milli"
+  }
 }

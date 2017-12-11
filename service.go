@@ -210,7 +210,7 @@ func NewService(config *ServerConfig, transferConfig *TransferConfig) (*Service,
 	if len(config.Cluster) == 0 {
 		transferObjectService = newtransferObjectService(taskRegistry)
 	} else {
-		transferObjectService = newTransferObjectServiceClient(config.Cluster)
+		transferObjectService = newTransferObjectServiceClient(config.Cluster, config.TimeOut)
 	}
 	transferService := newTransferService(transferObjectService)
 	var result = &Service{

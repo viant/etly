@@ -17,6 +17,10 @@
         "Duration": 3,
         "Unit": "sec"
       },
+      "TimeOut": {
+        "Duration": 300,
+        "Unit": "milli"
+      },
       "Frequency": {
         "Duration": 1,
         "Unit": "sec"

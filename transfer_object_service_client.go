@@ -5,21 +5,16 @@ import (
 	"sync/atomic"
 
 	"github.com/viant/toolbox"
+	"time"
 )
 
-var toolboxClient *toolbox.ToolboxHTTPClient
-
 func init() {
-	var err error
-	toolboxClient, err = toolbox.NewToolboxHTTPClient(&toolbox.HttpOptions{Key: "TimeoutMs", Value: 240000})
-	if err != nil {
-		panic(err)
-	}
 }
 
 type transferObjectServiceClient struct {
-	cluster []*Host
-	index   uint64
+	cluster       []*Host
+	index         uint64
+	toolboxClient *toolbox.ToolboxHTTPClient
 }
 
 func (c *transferObjectServiceClient) getNextHost() *Host {
@@ -31,7 +26,7 @@ func (c *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *
 	response := &TransferObjectResponse{}
 	host := c.getNextHost()
 	URL := fmt.Sprintf("http://%v:%v/etly/transfer", host.Server, host.Port)
-	err := toolboxClient.Request("post", URL, request, response,
+	err := c.toolboxClient.Request("post", URL, request, response,
 		toolbox.NewJSONEncoderFactory(),
 		toolbox.NewJSONDecoderFactory())
 	if err != nil {
@@ -43,8 +38,24 @@ func (c *transferObjectServiceClient) Transfer(request *TransferObjectRequest) *
 	return response
 }
 
-func newTransferObjectServiceClient(cluster []*Host) TransferObjectService {
+func newTransferObjectServiceClient(cluster []*Host, timeOut *Duration) TransferObjectService {
+	//Current API code was not designed to return error so panic here incase there is any misconfiguration
+	if timeOut == nil {
+		panic("Timeout is not configured")
+	}
+
+	d, err := timeOut.Get()
+	if err != nil {
+		panic(err)
+	}
+
+	timeOutMSec := int(d / time.Millisecond) 	//Convert to msec
+	toolboxClient, err := toolbox.NewToolboxHTTPClient(&toolbox.HttpOptions{Key: "TimeoutMs", Value: timeOutMSec})
+	if err != nil {
+		panic(err)
+	}
 	return &transferObjectServiceClient{
-		cluster: cluster,
+		cluster:       cluster,
+		toolboxClient: toolboxClient,
 	}
 }
