@@ -258,6 +258,10 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 		if storageTransfer.Transfer.MaxTransfers > 0 && elgibleStorageCountSoFar >= storageTransfer.Transfer.MaxTransfers {
 			continue
 		}
+		if candidate.FileInfo().Size() == 0 {
+			//Skipping zero byte files
+			continue;
+		}
 		filteredObjects = append(filteredObjects, candidate)
 		elgibleStorageCountSoFar++
 
@@ -412,7 +416,9 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
-		e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta})
+		if e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta}); e != nil {
+			log.Printf("Failed to persist meta status for url:%v, Error:%v", meta.URL, e)
+		}
 		if err == nil {
 			err = e
 		}
@@ -464,6 +470,8 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 					err = e
 					return
 				}
+
+
 			}
 
 			objectMeta := NewObjectMeta(targetTransfer.Source.Name,

@@ -82,6 +82,10 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get source: %v %v", sourceURL, err))
 	}
 
+	if source.IsContent() && source.FileInfo() != nil && source.FileInfo().Size() == 0 {
+		return NewErrorTransferObjectResponse(fmt.Sprintf("Source Object to be transferred is empty. Source Url = %v, %v", sourceURL, err))
+	}
+
 	reader, err := storageService.Download(source)
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to download: %v %v", sourceURL, err))
