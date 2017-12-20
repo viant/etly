@@ -86,19 +86,26 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Source Object to be transferred is empty. Source Url = %v, %v", sourceURL, err))
 	}
 
-	reader, err := storageService.Download(source)
+	contentReader, err := storageService.Download(source)
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to download: %v %v", sourceURL, err))
 	}
+	defer contentReader.Close()
+	content, err := ioutil.ReadAll(contentReader)
+	if err != nil {
+		return NewErrorTransferObjectResponse(fmt.Sprintf("failed to download: %v %v", sourceURL, err))
+	}
+	if transfer.Source.Compression != "" {
+		reader, err := getEncodingReader(transfer.Source.Compression, bytes.NewReader(content))
+		if err != nil {
+			return NewErrorTransferObjectResponse(fmt.Sprintf("failed to get encoding reader : %v %v", sourceURL, err))
+		}
+		content, err = ioutil.ReadAll(reader)
+		if err != nil {
+			return NewErrorTransferObjectResponse(fmt.Sprintf("failed to ReadAll : %v %v", sourceURL, err))
+		}
+	}
 
-	reader, err = getEncodingReader(transfer.Source.Compression, reader)
-	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to get encoding reader : %v %v", sourceURL, err))
-	}
-	content, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to ReadAll : %v %v", sourceURL, err))
-	}
 	if transfer.Source.DataFormat == "ndjson" {
 		var processedTransfers, err = s.transferObjectFromNdjson(content, transfer, task)
 		task.Progress.FileProcessed++
