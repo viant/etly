@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"io"
 )
 
 type TransferObjectRequest struct {
@@ -90,20 +91,22 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	if err != nil {
 		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to download: %v %v", sourceURL, err))
 	}
+
 	defer contentReader.Close()
-	content, err := ioutil.ReadAll(contentReader)
-	if err != nil {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("failed to download: %v %v", sourceURL, err))
-	}
+
+	var reader io.Reader
 	if transfer.Source.Compression != "" {
-		reader, err := getEncodingReader(transfer.Source.Compression, bytes.NewReader(content))
+		reader, err = getEncodingReader(transfer.Source.Compression, contentReader)
 		if err != nil {
 			return NewErrorTransferObjectResponse(fmt.Sprintf("failed to get encoding reader : %v %v", sourceURL, err))
 		}
-		content, err = ioutil.ReadAll(reader)
-		if err != nil {
-			return NewErrorTransferObjectResponse(fmt.Sprintf("failed to ReadAll : %v %v", sourceURL, err))
-		}
+	} else {
+		reader = contentReader
+	}
+
+	content, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return NewErrorTransferObjectResponse(fmt.Sprintf("failed to ReadAll : %v %v", sourceURL, err))
 	}
 
 	if transfer.Source.DataFormat == "ndjson" {
