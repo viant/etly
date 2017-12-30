@@ -17,11 +17,13 @@ import (
 	"github.com/viant/etly/pkg/bigquery"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
+	"github.com/viant/dsc"
 )
 
 const (
 	SourceTypeURL       = "url"
 	SourceTypeDatastore = "datastore"
+	defaultMaxAllowedSize = 1024 * 1024 * 64
 )
 
 var regExpCache = make(map[string]*regexp.Regexp)
@@ -69,11 +71,24 @@ func (s *transferService) Transfer(task *TransferTask) error {
 			return err
 		}
 	case SourceTypeDatastore:
-		return fmt.Errorf("Unsupported yet source Type %v", templateTransfer.Source.Type)
+		err = s.transferDataFromDatastoreSources(transfers, task)
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("Unsupported source Type %v", templateTransfer.Source.Type)
 	}
 
+	return nil
+}
+
+func (s *transferService) transferDataFromDatastoreSources(transfers []*Transfer, task *TransferTask) error {
+	for i, transfer := range transfers {
+		_, err := s.transferDataFromDatastoreSource(i, transfer, task)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -148,9 +163,7 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 
 			groupedTransfers[key] = storageTransfer
 		}
-
 		storageTransfer.StorageObjects = append(storageTransfer.StorageObjects, storageObject)
-
 	}
 	var result = make([]*StorageObjectTransfer, 0)
 	for _, storageTransfer := range groupedTransfers {
@@ -158,6 +171,175 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 	}
 	return result, nil
 }
+
+
+
+func (s *transferService) transferDataInBatch(recordChannel chan map[string]interface{}, transfer *Transfer, task *TransferTask, fetchedCompleted *int32, threadId int) (completed bool, err error) {
+	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
+	transformer := NewTransformerRegistry().registry[transfer.Transformer]
+	var transformedTargets TargetTransformations = make(map[string]*TargetTransformation)
+	predicate := NewFilterRegistry().registry[transfer.Filter]
+	var decodingError = &decodingError{}
+	encoderFactory := toolbox.NewJSONEncoderFactory()
+
+	var batchCount = 0;
+	var state = make(map[string]interface{})
+	state["$thread"] = threadId
+	state["$batchCount"] = batchCount
+	var count = len(recordChannel)
+
+	var maxAllowedSize = transfer.Target.MaxAllowedSize
+	if maxAllowedSize == 0 {
+		maxAllowedSize = defaultMaxAllowedSize
+	}
+	for ; ; {
+		select {
+		case record := <-recordChannel:
+			normalizeRecord(record)
+			buf := new(bytes.Buffer)
+			err = encoderFactory.Create(buf).Encode(record)
+			if err != nil {
+				return true, err
+			}
+
+			err = transferRecord(state, predicate, dataTypeProvider, buf.Bytes(), transformer, transfer, transformedTargets, task, decodingError)
+			if err != nil {
+				return true, err
+			}
+
+			var length =  transformedTargets.Length()
+			var size = transformedTargets.Size()
+			if length > 0  && size > 0 {
+				var recordSize =  size / length
+				if(recordSize + size > maxAllowedSize) {
+					processed, err := transformedTargets.Upload(transfer)
+					if err != nil {
+						return true, err
+					}
+					transformedTargets = make(map[string]*TargetTransformation, 0)
+					task.Progress.Update(processed...)
+					batchCount++
+					state["$batchCount"] = batchCount
+				}
+			}
+
+		case <-time.After(10 * time.Millisecond):
+			count = len(recordChannel)
+			completed = atomic.LoadInt32(fetchedCompleted) == 1
+			if completed {
+				if count == 0 {
+					if(transformedTargets.Length() > 0) {
+						processed, err := transformedTargets.Upload(transfer)
+						if err != nil {
+							return true, err
+						}
+						task.Progress.Update(processed...)
+					}
+					atomic.AddInt32(&task.Progress.BatchCount, int32(batchCount))
+					return true, nil
+				}
+			}
+		}
+	}
+	if err != nil || completed {
+		return true, nil
+	}
+	return false, nil
+}
+
+func normalizeRecord(record map[string]interface{}) {
+	for k, v := range record {
+		if toolbox.IsMap(v) {
+			var aMap = toolbox.AsMap(v)
+			normalizeRecord(aMap)
+			record[k] = aMap
+		}
+	}
+}
+
+func (s *transferService) transferInTheBackground(recordChannel chan map[string]interface{}, transfer *Transfer, task *TransferTask, fetchedCompleted *int32) *sync.WaitGroup {
+	var result = &sync.WaitGroup{}
+
+	var completed bool
+	var maxParallelTransfers = transfer.MaxParallelTransfers
+	if maxParallelTransfers == 0 {
+		maxParallelTransfers = 1
+	}
+	result.Add(maxParallelTransfers)
+	for i := 0; i < maxParallelTransfers;i++ {
+		go func() {
+			var err error
+			defer func() {
+				if err != nil {
+					atomic.StoreInt32(&task.StatusCode, StatusTaskNotRunning)
+					task.Status = "error"
+					task.Error = err.Error()
+				}
+				result.Done()
+			}()
+
+			for {
+
+				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, i)
+				if err != nil {
+					return
+				}
+				if completed {
+					return
+				}
+			}
+		}()
+	}
+	return result
+}
+
+func (s *transferService) transferDataFromDatastoreSource(index int, transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
+	var config = transfer.Source.DsConfig
+	if config == nil {
+		return nil, fmt.Errorf("Dsconfig was nil")
+	}
+	if err := config.Init(); err != nil {
+		return nil, err
+	}
+
+	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
+	if !hasProvider {
+		return nil, fmt.Errorf("failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target)
+	}
+	manager, err := dsc.NewManagerFactory().Create(config)
+	var recordsChannel = make(chan map[string]interface{}, task.Transfer.Source.BatchSize+1)
+	var fetchCompleted int32
+	task.StatusCode = StatusTaskRunning
+
+	waitGroup := s.transferInTheBackground(recordsChannel, transfer, task, &fetchCompleted)
+
+	var SQL = transfer.Source.Name
+	if ! strings.Contains(strings.ToUpper(SQL), "SELECT ") {
+		SQL = "SELECT * FROM " + transfer.Source.Name
+	}
+	err = manager.ReadAllWithHandler(SQL, []interface{}{}, func(scanner dsc.Scanner) (bool, error) {
+		var statusCode = atomic.LoadInt32(&task.StatusCode)
+		record := make(map[string]interface{})
+		if statusCode == StatusTaskNotRunning {
+			return false, nil
+		}
+		task.Progress.RecordRead++
+		err := scanner.Scan(&record)
+		if err != nil {
+			return false, fmt.Errorf("failed to scan:%v", err)
+		}
+		recordsChannel <- record
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	atomic.StoreInt32(&fetchCompleted, 1)
+	waitGroup.Wait()
+	return []*Meta{}, nil
+}
+
+
 
 func (s *transferService) transferDataFromURLSource(index int, transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
 	storageService, err := getStorageService(transfer.Source.Resource)
@@ -462,15 +644,14 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 						meta.Errors = make([]*Error, 0)
 					}
 					meta.Errors = append(meta.Errors, &Error{
-						Error:errMessage,
-						Time:time.Now(),
+						Error: errMessage,
+						Time:  time.Now(),
 					})
 				} else if e != gzip.ErrChecksum {
 					logger.Printf("Failed to targetTransfer: %v \n", e)
 					err = e
 					return
 				}
-
 
 			}
 

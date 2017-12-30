@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"io"
+	"github.com/viant/toolbox"
 )
 
 type TransferObjectRequest struct {
@@ -121,8 +122,8 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name,  err)
 		}
 		return response
-
 	}
+
 	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
 
 }
@@ -144,26 +145,33 @@ type TargetTransformation struct {
 	targetRecords []string
 }
 
-func getTargetKey(transfer *Transfer, source, target interface{}) (string, error) {
+func getTargetKey(transfer *Transfer, source, target interface{}, state map[string]interface{}) (string, error) {
 	if source == nil || target == nil {
 		return transfer.Target.Name, nil
 	}
 	if transfer.HasRecordLevelVariableExtraction() {
 		return expandWorkerVariables(transfer.Target.Name, transfer, source, target)
 	}
+	if len(state) > 0 {
+		for k, v:=range state {
+			transfer.Target.Name = strings.Replace(transfer.Target.Name, k, toolbox.AsString(v), len(transfer.Target.Name))
+		}
+	}
 	return transfer.Target.Name, nil
 }
 
+
+
+
+
 func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
-	result := make([]*ProcessedTransfer, 0)
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
-	transformedTargets := make(map[string]*TargetTransformation)
+	var transformedTargets TargetTransformations = make(map[string]*TargetTransformation)
 	lines := bytes.Split(source, []byte("\n"))
 	predicate := NewFilterRegistry().registry[transfer.Filter]
-	filtered := 0
-	var decodingError error
-	var decodingErrorCount = 0
+	var decodingError = &decodingError{}
+	var state = make(map[string]interface{})
 
 outer:
 	for _, line := range lines {
@@ -173,6 +181,7 @@ outer:
 
 		if len(transfer.Source.DataTypeMatch) > 0 {
 			for _, match := range transfer.Source.DataTypeMatch {
+				//if DataType is empty the matching fragment works like exclusion
 				if bytes.Contains(line, []byte(match.MatchingFragment)) {
 					if match.DataType == "" {
 						// Skip to next line
@@ -186,84 +195,17 @@ outer:
 				}
 			}
 		}
-		source := dataTypeProvider()
-		err := decodeJSONTarget(line, source)
+		err := transferRecord(state, predicate, dataTypeProvider, line, transformer, transfer, transformedTargets, task, decodingError)
 		if err != nil {
-			decodingErrorCount++
-			decodingError = fmt.Errorf("failed to decode json (%v times): %v, %s", decodingErrorCount, err, line)
-			if transfer.MaxErrorCounts != nil && decodingErrorCount >= *transfer.MaxErrorCounts {
-				return nil, fmt.Errorf("reached max errors %v",decodingError)
-			}
-			continue
-		}
-
-		if predicate == nil || predicate.Apply(source) {
-			if payloadAccessor, ok := source.(PayloadAccessor); ok {
-				payloadAccessor.SetPayload(string(line))
-			}
-			target, err := transformer(source)
-			if err != nil {
-				return nil, fmt.Errorf("failed to transform %v", err)
-			}
-			buf := new(bytes.Buffer)
-			err = encodeJSONSource(buf, target)
-			if err != nil {
-				return nil, err
-			}
-			transformedObject := bytes.Replace(buf.Bytes(), []byte("\n"), []byte(""), -1)
-			targetKey, err := getTargetKey(transfer, source, target)
-			if err != nil {
-				return nil, err
-			}
-			_, found := transformedTargets[targetKey]
-			if !found {
-				targetTransfer := transfer.Clone()
-				targetTransfer.Target.Name = targetKey
-				targetTransfer.Meta.Name, err = expandWorkerVariables(targetTransfer.Meta.Name, transfer, source, target)
-				if err != nil {
-					return nil, err
-				}
-				transformedTargets[targetKey] = &TargetTransformation{
-					targetRecords: make([]string, 0),
-					ProcessedTransfer: &ProcessedTransfer{
-						Transfer: targetTransfer,
-					},
-				}
-			}
-			transformedTargets[targetKey].targetRecords = append(transformedTargets[targetKey].targetRecords, string(transformedObject))
-			task.Progress.RecordProcessed++
-			transformedTargets[targetKey].RecordProcessed++
-			transformedTargets[targetKey].RecordErrors = decodingErrorCount
-
-		} else {
-			task.Progress.RecordSkipped++
-			filtered++
+			return nil, err
 		}
 		task.UpdateElapsed()
 	}
-
-	if len(transformedTargets) > 0 {
-		for _, transformed := range transformedTargets {
-			content := strings.Join(transformed.targetRecords, "\n")
-			compressedData, err := encodeData(transfer.Target.Compression, []byte(content))
-			if err != nil {
-				return nil, err
-			}
-			storageService, err := getStorageService(transfer.Target.Resource)
-			if err != nil {
-				return nil, err
-			}
-
-			//Disable MD5
-			fileName := transformed.ProcessedTransfer.Transfer.Target.Name + "?disableMD5=true"
-			err = storageService.Upload(fileName, bytes.NewReader(compressedData))
-			if err != nil {
-				return nil, fmt.Errorf("failed to upload: %v %v", transfer.Target, err)
-			}
-			result = append(result, transformed.ProcessedTransfer)
-		}
+	result, err := transformedTargets.Upload(transfer)
+	if err != nil {
+		return nil, err
 	}
-	return result, decodingError
+	return result, decodingError.error
 }
 
 func newtransferObjectService(taskRegistry *TaskRegistry) TransferObjectService {
