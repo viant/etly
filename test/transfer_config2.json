@@ -1,0 +1,45 @@
+{
+  "Transfers": [
+    {
+      "Source": {
+        "Name": "SELECT * FROM apps",
+        "Type": "datastore",
+        "DataFormat": "ndjson",
+        "DataType": "AppLog1.log",
+        "DsConfig": {
+          "DriverName": "csv",
+          "Descriptor": "[url]",
+          "Parameters": {
+            "dateFormat": "yyyy-MM-dd hh:mm:ss",
+            "ext": "csv",
+            "url": "file://<pwd>test/ds/in"
+          }
+        }
+      },
+      "Target": {
+        "Name": "file://<pwd>test/ds/out/app-$thread-$batchCount.log",
+        "Type": "url",
+        "DataFormat": "ndjson"
+      },
+      "TimeWindow": {
+        "Duration": 3,
+        "Unit": "sec"
+      },
+      "TimeOut": {
+        "Duration": 300,
+        "Unit": "milli"
+      },
+      "Frequency": {
+        "Duration": 1,
+        "Unit": "sec"
+      },
+      "Meta": {
+        "Name": "file://<pwd>test/ds/meta.json"
+      },
+      "Transformer": "service_test.AppLog1ToLog2",
+      "MaxParallelTransfers": 1,
+      "MaxTransfers": 1,
+      "MaxErrorCounts":0
+    }
+  ]
+}
