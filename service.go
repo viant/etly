@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fmt"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
-	"fmt"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -98,9 +98,9 @@ func (s *Service) runTransfer(transfer *Transfer) (tasks []*TransferTask, err er
 
 func (s *Service) TransferOnce(request *DoRequest) *DoResponse {
 	var response = &DoResponse{
-		Status: "ok",
+		Status:    "ok",
 		StartTime: time.Now(),
-		Tasks: make([]*TransferTask, 0),
+		Tasks:     make([]*TransferTask, 0),
 	}
 	for _, transfer := range request.Transfers {
 		tasks, err := s.runTransfer(transfer)
@@ -171,6 +171,7 @@ func (s *Service) getMetaObject(name string, metaResource Resource) ([]*Meta, er
 	}
 	var candidates = make([]storage.Object, 0)
 	parentURL := expandCurrentWorkingDirectory(metaResource.Name[:parentUrlIndex])
+
 	service, err := getStorageService(&metaResource)
 	if err != nil {
 		return nil, err
