@@ -7,9 +7,9 @@ type DoRequest struct {
 }
 
 type DoResponse struct {
-	Status string
-	Error string
+	Status    string
+	Error     string
 	StartTime time.Time
-	EndTime time.Time
-	Tasks []*TransferTask
+	EndTime   time.Time
+	Tasks     []*TransferTask
 }
