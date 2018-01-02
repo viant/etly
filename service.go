@@ -11,6 +11,7 @@ import (
 
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
+	"fmt"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -60,7 +61,7 @@ func (s *Service) Start() error {
 			case <-tick:
 				err := s.Run()
 				if err != nil {
-					logger.Printf("Failed to Run status %v", err)
+					logger.Printf("failed to Run status %v", err)
 				}
 			}
 		}
@@ -72,6 +73,49 @@ func (s *Service) Version() string {
 	return Version
 }
 
+func (s *Service) runTransfer(transfer *Transfer) (tasks []*TransferTask, err error) {
+	now := time.Now()
+	var result = make([]*TransferTask, 0)
+	if (transfer.nextRun == nil || transfer.nextRun.Before(now)) && !transfer.isRunning() {
+		transfer.setRunning(true)
+		defer transfer.setRunning(false)
+		err = transfer.scheduleNextRun(now)
+		if err != nil {
+			logger.Printf("failed to schedule Transfer: %v %v", err, transfer)
+			return
+		}
+		transferTask := NewTransferTask(transfer)
+		result = append(result, transferTask)
+		s.taskRegistry.Register(transferTask.Task)
+		err = s.transferService.Run(transferTask)
+		if err != nil {
+			logger.Printf("failed to Transfer: %v %v", err, transfer)
+			err = err
+		}
+	}
+	return result, err
+}
+
+func (s *Service) TransferOnce(request *DoRequest) *DoResponse {
+	var response = &DoResponse{
+		Status: "ok",
+		StartTime: time.Now(),
+		Tasks: make([]*TransferTask, 0),
+	}
+	for _, transfer := range request.Transfers {
+		tasks, err := s.runTransfer(transfer)
+		if err != nil {
+			response.Status = "error"
+			response.Error = fmt.Sprintf("%v", err)
+		}
+		if len(tasks) > 0 {
+			response.Tasks = append(response.Tasks, tasks...)
+		}
+	}
+	response.EndTime = time.Now()
+	return response
+}
+
 func (s *Service) Run() error {
 	var result error
 	if s.transferConfig == nil || len(s.transferConfig.Transfers) == 0 {
@@ -79,25 +123,7 @@ func (s *Service) Run() error {
 	}
 	for _, transfer := range s.transferConfig.Transfers {
 		go func(transfer *Transfer) {
-			now := time.Now()
-			if (transfer.nextRun == nil || transfer.nextRun.Before(now)) && !transfer.isRunning() {
-				transfer.setRunning(true)
-				defer transfer.setRunning(false)
-				err := transfer.scheduleNextRun(now)
-				if err != nil {
-					logger.Printf("Failed to schedule Transfer: %v %v", err, transfer)
-					result = err
-					return
-				}
-				transferTask := NewTransferTask(transfer)
-				s.taskRegistry.Register(transferTask.Task)
-				err = s.transferService.Run(transferTask)
-				if err != nil {
-					logger.Printf("Failed to Transfer: %v %v", err, transfer)
-					result = err
-				}
-				return
-			}
+			_, result = s.runTransfer(transfer)
 		}(transfer)
 	}
 	return result
@@ -126,7 +152,7 @@ func (s *Service) GetErrors() []*ObjectMeta {
 	//for _, transfer := range s.config.Transfers {
 	//	meta, err  := s.transferService.LoadMeta(transfer.Meta)
 	//	if err != nil {
-	//		logger.Printf("Failed to load Meta file: %v %v", transfer, err)
+	//		logger.Printf("failed to load Meta file: %v %v", transfer, err)
 	//		continue
 	//	}
 	//	for _, processedFile := range meta.ProcessedResources {
