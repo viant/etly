@@ -120,10 +120,8 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name, err)
 		}
 
-
 		return response
 	}
-
 
 	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
 

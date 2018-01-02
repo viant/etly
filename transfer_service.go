@@ -583,7 +583,6 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		return nil, fmt.Errorf("failed to perform GBQ load: %v", buffer.String())
 	}
 
-
 	message := fmt.Sprintf("status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
 		meta.Processed[storageObject.URL()] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
