@@ -13,12 +13,12 @@ type VariableExtractions []*VariableExtraction
 
 //Transfer represents a transfer rule
 type Transfer struct {
-	Name       string
-	Source     *Source
-	Target     *Target
-	Meta       *Resource
-	TimeWindow *Duration
-	Frequency  *Duration
+	Name                 string
+	Source               *Source
+	Target               *Target
+	Meta                 *Resource
+	TimeWindow           *Duration
+	Frequency            *Duration
 	MaxParallelTransfers int
 	MaxTransfers         int
 	Transformer          string //name of registered transformer
