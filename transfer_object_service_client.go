@@ -49,7 +49,7 @@ func newTransferObjectServiceClient(cluster []*Host, timeOut *Duration) Transfer
 		panic(err)
 	}
 
-	timeOutMSec := int(d / time.Millisecond) 	//Convert to msec
+	timeOutMSec := int(d / time.Millisecond) //Convert to msec
 	toolboxClient, err := toolbox.NewToolboxHTTPClient(&toolbox.HttpOptions{Key: "TimeoutMs", Value: timeOutMSec})
 	if err != nil {
 		panic(err)

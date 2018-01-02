@@ -19,5 +19,5 @@ func TestTransferObjectServiceClient_new_panic(t *testing.T) {
 	config := ServerConfig{
 		TimeOut: &Duration{Duration: 6, Unit: "mins"}, //Unsupported unit
 	}
-	assert.Panics(t, func() {newTransferObjectServiceClient(config.Cluster, config.TimeOut)})
+	assert.Panics(t, func() { newTransferObjectServiceClient(config.Cluster, config.TimeOut) })
 }

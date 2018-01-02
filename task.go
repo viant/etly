@@ -5,8 +5,6 @@ const taskDoneStatus = "DONE"
 const taskErrorStatus = "ERROR"
 const taskOKStatus = "OK"
 
-
-
 const (
 	//StatusTaskNotRunning  represent terminated task
 	StatusTaskNotRunning = iota
@@ -16,11 +14,9 @@ const (
 
 //Task represents an ETL status
 type Task struct {
-	Id       string
-	Progress interface{}
-	Status   string
+	Id         string
+	Progress   interface{}
+	Status     string
 	StatusCode int32
-	Error    string
+	Error      string
 }
-
-

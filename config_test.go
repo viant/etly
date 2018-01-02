@@ -1,18 +1,17 @@
 package etly
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
 func TestDuration_TimeUnit(t *testing.T) {
-	d := Duration {Duration:240, Unit:"milli"}
+	d := Duration{Duration: 240, Unit: "milli"}
 	duration, err := d.TimeUnit()
 	assert.Empty(t, err)
 	assert.Equal(t, time.Millisecond, duration)
 }
-
 
 func TestDuration_Get(t *testing.T) {
 	{
