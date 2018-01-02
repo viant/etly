@@ -1,24 +1,23 @@
 package etly
 
 import (
-	"strings"
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 type TargetTransformations map[string]*TargetTransformation
 
 func (t *TargetTransformations) Length() int {
-	var result = 0;
+	var result = 0
 	for _, v := range *t {
 		result += len(v.targetRecords)
 	}
 	return result
 }
 
-
 func (t *TargetTransformations) Size() int {
-	var result = 0;
+	var result = 0
 	for _, v := range *t {
 		for _, record := range v.targetRecords {
 			result += len(record)
@@ -26,9 +25,6 @@ func (t *TargetTransformations) Size() int {
 	}
 	return result
 }
-
-
-
 
 func (t *TargetTransformations) Upload(transfer *Transfer) ([]*ProcessedTransfer, error) {
 	var result = make([]*ProcessedTransfer, 0)

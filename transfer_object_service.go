@@ -3,13 +3,13 @@ package etly
 import (
 	"bytes"
 	"fmt"
+	"github.com/viant/toolbox"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 	"time"
-	"io"
-	"github.com/viant/toolbox"
 )
 
 type TransferObjectRequest struct {
@@ -66,12 +66,10 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	sourceURL := request.SourceURL
 	transfer := request.Transfer
 
-	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
-	if !hasProvider {
-		return NewErrorTransferObjectResponse(fmt.Sprintf("Failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target))
+	if err := transfer.Validate(); err != nil {
+		return NewErrorTransferObjectResponse(fmt.Sprintf("%v", err))
 	}
 	task := NewTransferTaskForID(request.TaskID, transfer)
-
 	s.taskRegistry.Register(task.Task)
 
 	storageService, err := getStorageService(transfer.Source.Resource)
@@ -119,10 +117,13 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		}
 		response.ProcessedTransfers = processedTransfers
 		if err != nil {
-			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name,  err)
+			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name, err)
 		}
+
+
 		return response
 	}
+
 
 	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
 
@@ -153,20 +154,17 @@ func getTargetKey(transfer *Transfer, source, target interface{}, state map[stri
 		return expandWorkerVariables(transfer.Target.Name, transfer, source, target)
 	}
 	if len(state) > 0 {
-		for k, v:=range state {
+		for k, v := range state {
 			transfer.Target.Name = strings.Replace(transfer.Target.Name, k, toolbox.AsString(v), len(transfer.Target.Name))
 		}
 	}
 	return transfer.Target.Name, nil
 }
 
-
-
-
-
 func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
+
 	var transformedTargets TargetTransformations = make(map[string]*TargetTransformation)
 	lines := bytes.Split(source, []byte("\n"))
 	predicate := NewFilterRegistry().registry[transfer.Filter]

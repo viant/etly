@@ -14,15 +14,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/viant/dsc"
 	"github.com/viant/etly/pkg/bigquery"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
-	"github.com/viant/dsc"
 )
 
 const (
-	SourceTypeURL       = "url"
-	SourceTypeDatastore = "datastore"
+	SourceTypeURL         = "url"
+	SourceTypeDatastore   = "datastore"
 	defaultMaxAllowedSize = 1024 * 1024 * 64
 )
 
@@ -172,8 +172,6 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 	return result, nil
 }
 
-
-
 func (s *transferService) transferDataInBatch(recordChannel chan map[string]interface{}, transfer *Transfer, task *TransferTask, fetchedCompleted *int32, threadId int) (completed bool, err error) {
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
@@ -181,8 +179,9 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 	predicate := NewFilterRegistry().registry[transfer.Filter]
 	var decodingError = &decodingError{}
 	encoderFactory := toolbox.NewJSONEncoderFactory()
-
-	var batchCount = 0;
+	var maxErrorCount = 0
+	transfer.MaxErrorCounts = &maxErrorCount
+	var batchCount = 0
 	var state = make(map[string]interface{})
 	state["$thread"] = threadId
 	state["$batchCount"] = batchCount
@@ -192,26 +191,27 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 	if maxAllowedSize == 0 {
 		maxAllowedSize = defaultMaxAllowedSize
 	}
-	for ; ; {
+	for {
 		select {
 		case record := <-recordChannel:
 			normalizeRecord(record)
 			buf := new(bytes.Buffer)
 			err = encoderFactory.Create(buf).Encode(record)
+			encoded := []byte(buf.String())
 			if err != nil {
-				return true, err
+				return false, err
 			}
 
-			err = transferRecord(state, predicate, dataTypeProvider, buf.Bytes(), transformer, transfer, transformedTargets, task, decodingError)
+			err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError)
 			if err != nil {
-				return true, err
+				return false, err
 			}
 
-			var length =  transformedTargets.Length()
+			var length = transformedTargets.Length()
 			var size = transformedTargets.Size()
-			if length > 0  && size > 0 {
-				var recordSize =  size / length
-				if(recordSize + size > maxAllowedSize) {
+			if length > 0 && size > 0 {
+				var recordSize = size / length
+				if recordSize+size > maxAllowedSize {
 					processed, err := transformedTargets.Upload(transfer)
 					if err != nil {
 						return true, err
@@ -228,7 +228,7 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 			completed = atomic.LoadInt32(fetchedCompleted) == 1
 			if completed {
 				if count == 0 {
-					if(transformedTargets.Length() > 0) {
+					if transformedTargets.Length() > 0 {
 						processed, err := transformedTargets.Upload(transfer)
 						if err != nil {
 							return true, err
@@ -266,7 +266,7 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 		maxParallelTransfers = 1
 	}
 	result.Add(maxParallelTransfers)
-	for i := 0; i < maxParallelTransfers;i++ {
+	for i := 0; i < maxParallelTransfers; i++ {
 		go func() {
 			var err error
 			defer func() {
@@ -279,7 +279,6 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 			}()
 
 			for {
-
 				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, i)
 				if err != nil {
 					return
@@ -298,15 +297,20 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 	if config == nil {
 		return nil, fmt.Errorf("Dsconfig was nil")
 	}
+	for k, v := range config.Parameters {
+		config.Parameters[k] = expandCurrentWorkingDirectory(v)
+	}
 	if err := config.Init(); err != nil {
 		return nil, err
 	}
 
-	_, hasProvider := NewProviderRegistry().registry[transfer.Source.DataType]
-	if !hasProvider {
-		return nil, fmt.Errorf("failed to lookup provider for data type '%v':  %v -> %v", transfer.Source.DataType, transfer.Source.Name, transfer.Target)
+	if err := transfer.Validate(); err != nil {
+		return nil, err
 	}
 	manager, err := dsc.NewManagerFactory().Create(config)
+	if err != nil {
+		return nil, err
+	}
 	var recordsChannel = make(chan map[string]interface{}, task.Transfer.Source.BatchSize+1)
 	var fetchCompleted int32
 	task.StatusCode = StatusTaskRunning
@@ -314,7 +318,7 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 	waitGroup := s.transferInTheBackground(recordsChannel, transfer, task, &fetchCompleted)
 
 	var SQL = transfer.Source.Name
-	if ! strings.Contains(strings.ToUpper(SQL), "SELECT ") {
+	if !strings.Contains(strings.ToUpper(SQL), "SELECT ") {
 		SQL = "SELECT * FROM " + transfer.Source.Name
 	}
 	err = manager.ReadAllWithHandler(SQL, []interface{}{}, func(scanner dsc.Scanner) (bool, error) {
@@ -328,18 +332,27 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 		if err != nil {
 			return false, fmt.Errorf("failed to scan:%v", err)
 		}
+
 		recordsChannel <- record
 		return true, nil
 	})
+
+	atomic.StoreInt32(&fetchCompleted, 1)
+
 	if err != nil {
 		return nil, err
 	}
-	atomic.StoreInt32(&fetchCompleted, 1)
+
+	meta := &Meta{
+		Status: &ProcessingStatus{
+			RecordProcessed:   int(task.Progress.RecordProcessed),
+			ResourcePending:   0,
+			ResourceProcessed: 1,
+		},
+	}
 	waitGroup.Wait()
-	return []*Meta{}, nil
+	return []*Meta{meta}, nil
 }
-
-
 
 func (s *transferService) transferDataFromURLSource(index int, transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
 	storageService, err := getStorageService(transfer.Source.Resource)
@@ -442,7 +455,7 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 		}
 		if candidate.FileInfo().Size() == 0 {
 			//Skipping zero byte files
-			continue;
+			continue
 		}
 		filteredObjects = append(filteredObjects, candidate)
 		elgibleStorageCountSoFar++
@@ -538,10 +551,10 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		URIs:       URIs,
 	}
 	task.UpdateElapsed()
-	logger.Printf("Loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
+	logger.Printf("loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
 	status, jobId, err := bigquery.New().Load(job)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to execute GBQ load job: %v", err)
+		return nil, fmt.Errorf("failed to execute GBQ load job: %v", err)
 	}
 	task.UpdateElapsed()
 
@@ -560,7 +573,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 				// Log this to meta file so we can skip it next time.
 				meta.Processed[er.Location] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 					er.Location,
-					"Error loading to GBQ",
+					"error loading to GBQ",
 					er.Error(),
 					0,
 					0,
@@ -569,7 +582,9 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		}
 		return nil, fmt.Errorf("failed to perform GBQ load: %v", buffer.String())
 	}
-	message := fmt.Sprintf("Status: %v  with job id: %v", status.State, jobId)
+
+
+	message := fmt.Sprintf("status: %v  with job id: %v", status.State, jobId)
 	for _, storageObject := range storageTransfer.StorageObjects {
 		meta.Processed[storageObject.URL()] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
 			storageObject.URL(),
@@ -599,7 +614,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
 		if e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta}); e != nil {
-			log.Printf("Failed to persist meta status for url:%v, Error:%v", meta.URL, e)
+			log.Printf("failed to persist meta status for url:%v, Error:%v", meta.URL, e)
 		}
 		if err == nil {
 			err = e
@@ -611,7 +626,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 	var metaUrl = transfer.Meta.Name
 	//all processed nothing new, the current assumption is that the whole file is process at once.
 	for len(candidates) == 0 {
-		logger.Println("No candidates no process")
+		logger.Println("no candidates no process")
 		return nil, nil
 	}
 	if transfer.MaxParallelTransfers == 0 {
@@ -638,7 +653,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 			var errMessage string
 			if e != nil {
 				errMessage = e.Error()
-				if strings.Contains(errMessage, "failed to decode json") && ! strings.Contains(errMessage, "reached max errors") {
+				if strings.Contains(errMessage, "failed to decode json") && !strings.Contains(errMessage, "reached max errors") {
 					//let this file be processed
 					if len(meta.Errors) == 0 {
 						meta.Errors = make([]*Error, 0)
@@ -648,7 +663,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 						Time:  time.Now(),
 					})
 				} else if e != gzip.ErrChecksum {
-					logger.Printf("Failed to targetTransfer: %v \n", e)
+					logger.Printf("failed to targetTransfer: %v \n", e)
 					err = e
 					return
 				}
@@ -766,7 +781,11 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 	}
 	var result = make([]*Transfer, 0)
 	for _, t := range transfers {
-		logger.Printf("Expand to: %s-%s-%s \n", t.Source.Name, t.Target.Name, t.Meta.Name)
+		var sourceName = t.Source.Name
+		sourceName = strings.Replace(sourceName, " ", "_", len(sourceName))
+		sourceName = strings.Replace(sourceName, "*", "_", len(sourceName))
+		sourceName = strings.Replace(sourceName, ",", "_", len(sourceName))
+		logger.Printf("Expand to: %s-%s-%s \n", sourceName, t.Target.Name, t.Meta.Name)
 		result = append(result, t)
 	}
 	return result, nil
