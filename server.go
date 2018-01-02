@@ -63,6 +63,14 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 			Handler:    service.transferObjectService.Transfer,
 			Parameters: []string{"request"},
 		},
+
+		toolbox.ServiceRouting{
+			HTTPMethod: "POST",
+			URI:        uriBasePath + "transferOnce",
+			Handler:    service.TransferOnce,
+			Parameters: []string{"request"},
+		},
+
 		toolbox.ServiceRouting{
 			HTTPMethod: "Get",
 			URI:        uriBasePath + "version",
