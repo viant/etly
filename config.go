@@ -2,23 +2,23 @@ package etly
 
 import (
 	"fmt"
+	"github.com/viant/dsc"
+	"github.com/viant/toolbox"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/viant/toolbox"
 )
 
 type VariableExtractions []*VariableExtraction
 
 //Transfer represents a transfer rule
 type Transfer struct {
-	Name                 string
-	Source               *Source
-	Target               *Target
-	Meta                 *Resource
-	TimeWindow           *Duration
-	Frequency            *Duration
+	Name       string
+	Source     *Source
+	Target     *Target
+	Meta       *Resource
+	TimeWindow *Duration
+	Frequency  *Duration
 	MaxParallelTransfers int
 	MaxTransfers         int
 	Transformer          string //name of registered transformer
@@ -38,6 +38,20 @@ func (t *Transfer) HasVariableExtraction() bool {
 //HasRecordLevelVariableExtraction returns true if variable has record level rule
 func (t *Transfer) HasRecordLevelVariableExtraction() bool {
 	return t.VariableExtraction.HasRecordSource()
+}
+
+func (t *Transfer) Validate() error {
+	_, hasProvider := NewProviderRegistry().registry[t.Source.DataType]
+	if !hasProvider {
+		return fmt.Errorf("failed to lookup provider for data type '%v':  %v -> %v", t.Source.DataType, t.Source.Name, t.Target.Name)
+	}
+	if t.Transformer != "" {
+		_, hasTransformer := NewTransformerRegistry().registry[t.Transformer]
+		if !hasTransformer {
+			return fmt.Errorf("failed to lookup transormer for '%v':  %v -> %v", t.Transformer, t.Source.Name, t.Target.Name)
+		}
+	}
+	return nil
 }
 
 //TransferConfig represents TransferConfig
@@ -70,6 +84,7 @@ type StructuredResource struct {
 	*Resource
 	DataType string //app data object name
 	Schema   *Resource
+	DsConfig *dsc.Config
 }
 
 func (r *StructuredResource) Clone() *StructuredResource {
@@ -80,6 +95,7 @@ func (r *StructuredResource) Clone() *StructuredResource {
 		Resource: r.Resource.Clone(),
 		DataType: r.DataType,
 		Schema:   r.Schema.Clone(),
+		DsConfig: r.DsConfig,
 	}
 	return result
 }
@@ -88,6 +104,7 @@ type Source struct {
 	*StructuredResource
 	FilterRegExp  string
 	DataTypeMatch []*DataTypeMatch
+	BatchSize     int //batch size for datastore source based transfer
 }
 
 func (r *Source) Clone() *Source {
@@ -105,6 +122,7 @@ func (r *Source) Clone() *Source {
 type Target struct {
 	*StructuredResource
 	TransferMethod string //upload only if url to datastore
+	MaxAllowedSize int    //batch size for datastore source based transfer
 }
 
 func (r *Target) Clone() *Target {
