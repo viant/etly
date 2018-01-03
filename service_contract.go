@@ -3,6 +3,7 @@ package etly
 import "time"
 
 type DoRequest struct {
+	Async     bool
 	Transfers []*Transfer
 }
 
