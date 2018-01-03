@@ -2,16 +2,15 @@ package etly
 
 import (
 	"errors"
+	"fmt"
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"fmt"
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -102,15 +101,22 @@ func (s *Service) TransferOnce(request *DoRequest) *DoResponse {
 		StartTime: time.Now(),
 		Tasks:     make([]*TransferTask, 0),
 	}
-	for _, transfer := range request.Transfers {
-		tasks, err := s.runTransfer(transfer)
-		if err != nil {
-			response.Status = "error"
-			response.Error = fmt.Sprintf("%v", err)
+	var trasnfer = func() {
+		for _, transfer := range request.Transfers {
+			tasks, err := s.runTransfer(transfer)
+			if err != nil {
+				response.Status = "error"
+				response.Error = fmt.Sprintf("%v", err)
+			}
+			if len(tasks) > 0 {
+				response.Tasks = append(response.Tasks, tasks...)
+			}
 		}
-		if len(tasks) > 0 {
-			response.Tasks = append(response.Tasks, tasks...)
-		}
+	}
+	if request.Async {
+		go trasnfer()
+	} else {
+		trasnfer()
 	}
 	response.EndTime = time.Now()
 	return response
