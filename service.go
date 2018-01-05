@@ -135,6 +135,18 @@ func (s *Service) Run() error {
 	return result
 }
 
+
+func (s *Service) GetTasksList(request http.Request)  []*Task {
+	var result = s.taskRegistry.GetAll()
+	request.ParseForm()
+	offset := toolbox.AsInt(request.Form.Get("offset"))
+	limit := toolbox.AsInt(request.Form.Get("limit"))
+	if limit == 0 || limit > len(result) {
+		limit = len(result)
+	}
+	return result[offset:limit]
+}
+
 func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 	var result []*Task
 	if len(ids) == 0 {
