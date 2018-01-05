@@ -1,5 +1,7 @@
 package etly
 
+import "time"
+
 const taskRunningStatus = "RUNNING"
 const taskDoneStatus = "DONE"
 const taskErrorStatus = "ERROR"
@@ -18,5 +20,6 @@ type Task struct {
 	Progress   interface{}
 	Status     string
 	StatusCode int32
+	StartTime time.Time
 	Error      string
 }

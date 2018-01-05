@@ -78,6 +78,7 @@ func (t *TaskRegistry) GetAll() []*Task {
 	return result
 }
 
+
 func NewTaskRegistry() *TaskRegistry {
 	return &TaskRegistry{
 		History:      make([]*Task, 0),
