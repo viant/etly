@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/viant/etly"
 	"github.com/viant/toolbox"
+	"io/ioutil"
 	"strings"
 	"time"
-	"io/ioutil"
 )
 
 type Log1 struct {
@@ -153,9 +153,6 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		response := s.ProcessingStatus("meta")
 		assert.Equal(t, "", response.Error)
-
-
-		
 
 		time.Sleep(1 * time.Second)
 		for _, file := range files {

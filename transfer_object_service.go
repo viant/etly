@@ -160,8 +160,6 @@ func getTargetKey(transfer *Transfer, source, target interface{}, state map[stri
 	return result, nil
 }
 
-
-
 func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]

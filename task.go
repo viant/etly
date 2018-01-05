@@ -20,6 +20,6 @@ type Task struct {
 	Progress   interface{}
 	Status     string
 	StatusCode int32
-	StartTime time.Time
+	StartTime  time.Time
 	Error      string
 }
