@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"google.golang.org/api/option"
+	"os"
 )
 
 // Service provides loading capability from Cloud Storage to BigQuery
@@ -50,7 +51,8 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 		"DatasetID", loadJob.DatasetID,
 		"TableID", loadJob.TableID,
 		"Ts", strconv.FormatInt(time.Now().Unix(), 10))
-	clientOption := option.WithServiceAccountFile(loadJob.Credential)
+	credential := strings.Replace(loadJob.Credential, "${env.HOME}", os.Getenv("HOME"), 1)
+	clientOption := option.WithServiceAccountFile(credential)
 	ctx := context.Background()
 
 	client, err := bigquery.NewClient(ctx, loadJob.ProjectID, clientOption)

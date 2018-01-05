@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/viant/toolbox"
+	"sync/atomic"
 )
 
 type decodingError struct {
@@ -61,8 +62,8 @@ func transferRecord(state map[string]interface{}, predicate toolbox.Predicate, d
 			}
 		}
 		transformedTargets[targetKey].targetRecords = append(transformedTargets[targetKey].targetRecords, string(transformedObject))
-		task.Progress.RecordProcessed++
 		transformedTargets[targetKey].RecordProcessed++
+		atomic.AddInt32(&task.Progress.RecordProcessed, 1)
 		transformedTargets[targetKey].RecordErrors = decodingError.count
 	} else {
 		task.Progress.RecordSkipped++
