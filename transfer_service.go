@@ -192,7 +192,8 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 		maxAllowedSize = defaultMaxAllowedSize
 	}
 	var processed = 0
-	outer: for {
+outer:
+	for {
 		select {
 		case record := <-recordChannel:
 			processed++
@@ -203,7 +204,7 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 			if err != nil {
 				break outer
 			}
-			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError);err != nil {
+			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError); err != nil {
 				break outer
 			}
 
@@ -213,7 +214,7 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 				var recordSize = size / length
 				if recordSize+size > maxAllowedSize {
 					var processed []*ProcessedTransfer
-					if processed, err = transformedTargets.Upload(transfer);err != nil {
+					if processed, err = transformedTargets.Upload(transfer); err != nil {
 						break outer
 					}
 					transformedTargets = make(map[string]*TargetTransformation, 0)
