@@ -191,21 +191,20 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 	if maxAllowedSize == 0 {
 		maxAllowedSize = defaultMaxAllowedSize
 	}
-	for {
+	var processed = 0
+	outer: for {
 		select {
 		case record := <-recordChannel:
+			processed++
 			normalizeRecord(record)
-
 			buf := new(bytes.Buffer)
 			err = encoderFactory.Create(buf).Encode(record)
 			encoded := []byte(buf.String())
 			if err != nil {
-				return false, err
+				break outer
 			}
-
-			err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError)
-			if err != nil {
-				return false, err
+			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError);err != nil {
+				break outer
 			}
 
 			var length = transformedTargets.Length()
@@ -213,14 +212,15 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 			if length > 0 && size > 0 {
 				var recordSize = size / length
 				if recordSize+size > maxAllowedSize {
-					processed, err := transformedTargets.Upload(transfer)
-					if err != nil {
-						return true, err
+					var processed []*ProcessedTransfer
+					if processed, err = transformedTargets.Upload(transfer);err != nil {
+						break outer
 					}
 					transformedTargets = make(map[string]*TargetTransformation, 0)
 					task.Progress.Update(processed...)
 					batchCount++
 					state["$batchCount"] = batchCount
+					atomic.AddInt32(&task.Progress.BatchCount, 1)
 				}
 			}
 		case <-time.After(time.Second):
@@ -230,14 +230,15 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 				if completed {
 					if count == 0 {
 						if transformedTargets.Length() > 0 {
-							processed, err := transformedTargets.Upload(transfer)
+
+							_, err = transformedTargets.Upload(transfer)
 							if err != nil {
-								return true, err
+								break outer
 							}
-							task.Progress.Update(processed...)
+
 						}
 						atomic.AddInt32(&task.Progress.BatchCount, int32(batchCount))
-						return true, nil
+						break outer
 					}
 				}
 			}
@@ -251,6 +252,9 @@ func (s *transferService) transferDataInBatch(recordChannel chan map[string]inte
 
 func normalizeRecord(record map[string]interface{}) {
 	for k, v := range record {
+		if v == nil {
+			continue
+		}
 		if toolbox.IsMap(v) {
 			var aMap = toolbox.AsMap(v)
 			normalizeRecord(aMap)
@@ -284,7 +288,7 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 	}
 	result.Add(maxParallelTransfers)
 	for i := 0; i < maxParallelTransfers; i++ {
-		go func() {
+		go func(routineSeq int) {
 			var err error
 			defer func() {
 				if err != nil {
@@ -295,9 +299,8 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 				result.Done()
 				return
 			}()
-
 			for {
-				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, i)
+				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, routineSeq)
 				if err != nil {
 					return
 				}
@@ -305,7 +308,7 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 					return
 				}
 			}
-		}()
+		}(i)
 	}
 	return result
 }
@@ -335,7 +338,7 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 	if err != nil {
 		return nil, err
 	}
-	var recordsChannel = make(chan map[string]interface{}, task.Transfer.Source.BatchSize+2)
+	var recordsChannel = make(chan map[string]interface{}, task.Transfer.Source.BatchSize+1)
 	var fetchCompleted int32
 	atomic.StoreInt32(&task.StatusCode, StatusTaskRunning)
 
@@ -344,20 +347,20 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 	if !strings.Contains(strings.ToUpper(SQL), "SELECT ") {
 		SQL = "SELECT * FROM " + transfer.Source.Name
 	}
-	err = manager.ReadAllWithHandler(SQL, []interface{}{}, func(scanner dsc.Scanner) (bool, error) {
+	counter := 0
 
+	err = manager.ReadAllWithHandler(SQL, []interface{}{}, func(scanner dsc.Scanner) (bool, error) {
 		record := make(map[string]interface{})
-		task.Progress.RecordRead++
+		atomic.AddInt32(&task.Progress.RecordRead, 1)
 		err := scanner.Scan(&record)
 		if err != nil {
 			return false, fmt.Errorf("failed to scan:%v", err)
 		}
-
 		select {
-
 		case recordsChannel <- record:
 		case <-time.After(5 * time.Second):
 		}
+		counter++
 		toContinue := s.isRunning(task)
 		return toContinue, nil
 	})
@@ -366,7 +369,6 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 	if err != nil {
 		return nil, err
 	}
-
 	meta := &Meta{
 		Status: &ProcessingStatus{
 			RecordProcessed:   int(task.Progress.RecordProcessed),
@@ -575,6 +577,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		URIs:       URIs,
 	}
 	task.UpdateElapsed()
+
 	logger.Printf("loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
 	status, jobId, err := bigquery.New().Load(job)
 	if err != nil {

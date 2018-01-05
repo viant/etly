@@ -39,6 +39,7 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 	result.Task = &Task{
 		Id:       fmt.Sprintf("%v-%v-%v", transfer.Name, now.UnixNano(), rand.NewSource(now.UnixNano()).Int63()),
 		Progress: result.Progress,
+		StartTime:time.Now(),
 	}
 	return result
 }
