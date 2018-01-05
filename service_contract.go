@@ -14,3 +14,7 @@ type DoResponse struct {
 	EndTime   time.Time
 	Tasks     []*TransferTask
 }
+
+type TaskListResponse struct {
+	Tasks []*Task
+}
