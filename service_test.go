@@ -11,6 +11,7 @@ import (
 	"github.com/viant/toolbox"
 	"strings"
 	"time"
+	"io/ioutil"
 )
 
 type Log1 struct {
@@ -133,7 +134,7 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 	assert.Equal(t, "milli", transferConfig.Transfers[0].TimeOut.Unit, "transferConfig.TimeOut.Unit")
 
 	var files = []string{
-		etly.GetCurrentWorkingDir() + "test/ds/out/app-1-0.log",
+		etly.GetCurrentWorkingDir() + "test/ds/out/app-0-0.log",
 	}
 	for _, file := range files {
 		if toolbox.FileExists(file) {
@@ -153,9 +154,19 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 		response := s.ProcessingStatus("meta")
 		assert.Equal(t, "", response.Error)
 
+
+		
+
 		time.Sleep(1 * time.Second)
 		for _, file := range files {
-			assert.True(t, toolbox.FileExists(file))
+			if assert.True(t, toolbox.FileExists(file)) {
+				content, _ := ioutil.ReadFile(file)
+				lines := strings.Split(string(content), "\n")
+				assert.Equal(t, 4, len(lines))
+				assert.True(t, strings.Contains(lines[0], "\"AppId\":1"), lines[0])
+				assert.True(t, strings.Contains(lines[1], "\"AppId\":2"), lines[1])
+
+			}
 		}
 	}
 }

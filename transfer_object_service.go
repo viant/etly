@@ -148,16 +148,19 @@ func getTargetKey(transfer *Transfer, source, target interface{}, state map[stri
 	if source == nil || target == nil {
 		return transfer.Target.Name, nil
 	}
-	if transfer.HasRecordLevelVariableExtraction() {
-		return expandWorkerVariables(transfer.Target.Name, transfer, source, target)
-	}
+	var result = transfer.Target.Name
 	if len(state) > 0 {
 		for k, v := range state {
-			transfer.Target.Name = strings.Replace(transfer.Target.Name, k, toolbox.AsString(v), len(transfer.Target.Name))
+			result = strings.Replace(result, k, toolbox.AsString(v), len(result))
 		}
 	}
-	return transfer.Target.Name, nil
+	if transfer.HasRecordLevelVariableExtraction() {
+		return expandWorkerVariables(result, transfer, source, target)
+	}
+	return result, nil
 }
+
+
 
 func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
