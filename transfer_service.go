@@ -46,15 +46,18 @@ type transferService struct {
 
 func (s *transferService) Run(task *TransferTask) (err error) {
 	task.Status = taskRunningStatus
-	defer func(error) {
-		task.Status = taskDoneStatus
+	defer func() {
 		if err != nil {
-			task.Error = err.Error()
 			task.Status = taskErrorStatus
+			task.Error = err.Error()
+		} else if task.Error != ""{
+			task.Status = taskErrorStatus
+		} else {
+			task.Status = taskDoneStatus
 		}
-
-	}(err)
-	return s.Transfer(task)
+	}()
+	err = s.Transfer(task)
+	return err
 }
 
 func (s *transferService) Transfer(task *TransferTask) error {
@@ -246,7 +249,8 @@ outer:
 		}
 	}
 	if err != nil || completed {
-		return true, nil
+		log.Printf("failed to log: %v", err)
+		return true, err
 	}
 	return false, nil
 }
@@ -293,19 +297,17 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 			var err error
 			defer func() {
 				if err != nil {
-					atomic.StoreInt32(&task.StatusCode, StatusTaskNotRunning)
+					log.Printf("transferInTheBackground err: %v", err)
 					task.Status = "error"
 					task.Error = err.Error()
+					atomic.StoreInt32(&task.StatusCode, StatusTaskNotRunning)
 				}
 				result.Done()
 				return
 			}()
 			for {
 				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, routineSeq)
-				if err != nil {
-					return
-				}
-				if completed {
+				if err != nil ||  completed {
 					return
 				}
 			}
@@ -377,6 +379,8 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 			ResourceProcessed: 1,
 		},
 	}
+
+
 	waitGroup.Wait()
 	return []*Meta{meta}, nil
 }
