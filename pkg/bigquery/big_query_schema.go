@@ -2,11 +2,9 @@ package bigquery
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"strings"
-
 	"cloud.google.com/go/bigquery"
-	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/url"
 )
 
 // Field is a custom bigquery schema that is compatible with current Adserver implementation
@@ -19,12 +17,8 @@ type Field struct {
 
 // SchemaFromFile reads schema from a file
 func SchemaFromFile(URL string) (bigquery.Schema, error) {
-	reader, _, err := toolbox.OpenReaderFromURL(URL)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	content, err := ioutil.ReadAll(reader)
+	resource := url.NewResource(URL)
+	content, err := resource.Download()
 	if err != nil {
 		return nil, err
 	}

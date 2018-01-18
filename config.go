@@ -29,6 +29,7 @@ type Transfer struct {
 	running              bool
 	lock                 sync.Mutex
 	TimeOut              *Duration //Configured timeout for a transfer
+	Repeat               int//in transferOnce number of execution
 }
 
 func (t *Transfer) HasVariableExtraction() bool {
