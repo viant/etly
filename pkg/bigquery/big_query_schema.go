@@ -2,11 +2,8 @@ package bigquery
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"strings"
-
 	"cloud.google.com/go/bigquery"
-	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/url"
 )
 
