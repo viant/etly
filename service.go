@@ -101,7 +101,7 @@ func (s *Service) TransferOnce(request *DoRequest) *DoResponse {
 		StartTime: time.Now(),
 		Tasks:     make([]*TransferTask, 0),
 	}
-	var trasnfer = func() {
+	var transfer = func() {
 		for _, transfer := range request.Transfers {
 			tasks, err := s.runTransfer(transfer)
 			if err != nil {
@@ -111,12 +111,16 @@ func (s *Service) TransferOnce(request *DoRequest) *DoResponse {
 			if len(tasks) > 0 {
 				response.Tasks = append(response.Tasks, tasks...)
 			}
+			transfer.Repeat--
+			if transfer.Repeat >= 0 {
+				s.TransferOnce(request)
+			}
 		}
 	}
 	if request.Async {
-		go trasnfer()
+		go transfer()
 	} else {
-		trasnfer()
+		transfer()
 	}
 	response.EndTime = time.Now()
 	return response
@@ -145,6 +149,7 @@ func (s *Service) GetTasksList(request http.Request) *TaskListResponse {
 	}
 	return &TaskListResponse{result[offset:limit]}
 }
+
 
 func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 	var result []*Task
