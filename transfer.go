@@ -46,6 +46,7 @@ func transferRecord(state map[string]interface{}, predicate toolbox.Predicate, d
 		if err != nil {
 			return err
 		}
+
 		_, found := transformedTargets[targetKey]
 		if !found {
 			targetTransfer := transfer.Clone()
