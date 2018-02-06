@@ -18,7 +18,6 @@ type TransferProgress struct {
 
 func (t *TransferProgress) Update(transfers ...*ProcessedTransfer) {
 	for _, transfer := range transfers {
-		atomic.AddInt32(&t.RecordProcessed, int32(transfer.RecordProcessed))
 		atomic.AddInt32(&t.RecordSkipped, int32(transfer.RecordSkipped))
 	}
 }
