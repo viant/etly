@@ -3,10 +3,10 @@ package etly
 import (
 	"fmt"
 	"github.com/viant/dsc"
-	"github.com/viant/toolbox"
 	"strings"
 	"sync"
 	"time"
+	"github.com/viant/toolbox/url"
 )
 
 type VariableExtractions []*VariableExtraction
@@ -257,13 +257,13 @@ type ServerConfig struct {
 //NewServerConfigFromURL creates a new config from URL
 func NewServerConfigFromURL(URL string) (result *ServerConfig, err error) {
 	result = &ServerConfig{}
-	err = toolbox.LoadConfigFromUrl(URL, result)
-	return
+	resource := url.NewResource(URL)
+	return result, resource.JSONDecode(result)
 }
 
 //NewTransferConfigFromURL creates a new config from URL
 func NewTransferConfigFromURL(URL string) (result *TransferConfig, err error) {
 	result = &TransferConfig{}
-	err = toolbox.LoadConfigFromUrl(URL, result)
-	return
+	resource := url.NewResource(URL)
+	return result, resource.JSONDecode(result)
 }
