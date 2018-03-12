@@ -328,7 +328,9 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 		return nil, fmt.Errorf("Dsconfig was nil")
 	}
 	for k, v := range config.Parameters {
-		config.Parameters[k] = expandCurrentWorkingDirectory(v)
+		if value, ok := v.(string);ok {
+			config.Parameters[k] = expandCurrentWorkingDirectory(value)
+		}
 	}
 	if err := config.Init(); err != nil {
 		return nil, err
