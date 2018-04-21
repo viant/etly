@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"hash/fnv"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 
 const timeVariableExpr = "<dateFormat:"
 const modeVarableExpr = "<mod:"
+const userVariableExpr = "${env.USER}"
 
 var jsonDecoderFactory = toolbox.NewJSONDecoderFactory()
 var jsonEncoderFactory = toolbox.NewJSONEncoderFactory()
@@ -45,6 +47,14 @@ func expandModExpressionIfPresent(text string, hash int) string {
 			text = strings.Replace(text, matchingExpression, value, len(text))
 		}
 		return text
+	}
+	return text
+}
+
+//This is just a temporary solution and needs to be worked as a generic solution for environment variables
+func expandEnvironmentVariableIfPresent(text string) string {
+	if strings.Contains(text, userVariableExpr) {
+		text = strings.Replace(text, userVariableExpr, os.Getenv("USER"), 1)
 	}
 	return text
 }
