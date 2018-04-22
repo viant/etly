@@ -50,7 +50,7 @@ func (s *transferService) Run(task *TransferTask) (err error) {
 		if err != nil {
 			task.Status = taskErrorStatus
 			task.Error = err.Error()
-		} else if task.Error != ""{
+		} else if task.Error != "" {
 			task.Status = taskErrorStatus
 		} else {
 			task.Status = taskDoneStatus
@@ -307,7 +307,7 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 			}()
 			for {
 				completed, err = s.transferDataInBatch(recordChannel, transfer, task, fetchedCompleted, routineSeq)
-				if err != nil ||  completed {
+				if err != nil || completed {
 					return
 				}
 			}
@@ -328,7 +328,7 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 		return nil, fmt.Errorf("Dsconfig was nil")
 	}
 	for k, v := range config.Parameters {
-		if value, ok := v.(string);ok {
+		if value, ok := v.(string); ok {
 			config.Parameters[k] = expandCurrentWorkingDirectory(value)
 		}
 	}
@@ -381,7 +381,6 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 			ResourceProcessed: 1,
 		},
 	}
-
 
 	waitGroup.Wait()
 	return []*Meta{meta}, nil
@@ -801,10 +800,13 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 		}
 		source := expandDateExpressionIfPresent(transfer.Source.Name, &sourceTime)
 		source = expandCurrentWorkingDirectory(source)
+		source = expandEnvironmentVariableIfPresent(source)
 		target := expandDateExpressionIfPresent(transfer.Target.Name, &sourceTime)
 		target = expandCurrentWorkingDirectory(target)
+		target = expandEnvironmentVariableIfPresent(target)
 		metaUrl := expandDateExpressionIfPresent(transfer.Meta.Name, &sourceTime)
 		metaUrl = expandCurrentWorkingDirectory(metaUrl)
+		metaUrl = expandEnvironmentVariableIfPresent(metaUrl)
 		transferKey := source + "//" + target + "//" + metaUrl
 		candidate, found := transfers[transferKey]
 		if !found {
