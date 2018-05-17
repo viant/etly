@@ -24,6 +24,8 @@ const userVariableExpr = "${env.USER}"
 var jsonDecoderFactory = toolbox.NewJSONDecoderFactory()
 var jsonEncoderFactory = toolbox.NewJSONEncoderFactory()
 
+const defaultTimeout time.Duration = time.Duration(10) * time.Minute
+
 func expandDateExpressionIfPresent(text string, sourceTime *time.Time) string {
 	for j := 0; j < len(text); j++ {
 		matchingExpression, dateFormat := getTimeVariableIfPresent(text)
@@ -248,4 +250,15 @@ func expandVaiables(text string, variables map[string]string) string {
 		}
 	}
 	return text
+}
+
+// Helper to get the timeout from configured Transfer or use default
+func getTimeoutFromTransfer(t *Transfer) time.Duration {
+	if t != nil && t.TimeOut != nil {
+		if timeout, err := t.TimeOut.Get(); err == nil {
+			return timeout
+		}
+	}
+	//Default is 10 mins
+	return defaultTimeout
 }
