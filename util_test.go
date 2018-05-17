@@ -24,3 +24,33 @@ func Test_expandEnvironmentVariables(t *testing.T) {
 	v := expandEnvironmentVariableIfPresent(s)
 	assert.Equal(t, -1, strings.Index(v, userVariableExpr))
 }
+
+func Test_GetTimeoutFromTransfer(t *testing.T) {
+	t.Run("GetTimeoutFromTransfer success case", func(t *testing.T) {
+		transfer := Transfer{
+			TimeOut: &Duration{
+				Unit:     "min",
+				Duration: 3,
+			},
+		}
+
+		duration := getTimeoutFromTransfer(&transfer)
+		assert.Equal(t, 180000000000, int(duration))
+	})
+
+	//No timeout configured case - it should default
+	t.Run("GetTimeoutFromTransfer default case", func(t *testing.T) {
+		transfer := Transfer{}
+
+		duration := getTimeoutFromTransfer(&transfer)
+		assert.Equal(t, 600000000000, int(duration))
+	})
+
+	t.Run("GetTimeoutFromTransfer doubling the duration case", func(t *testing.T) {
+		transfer := Transfer{}
+
+		duration := getTimeoutFromTransfer(&transfer) * 2
+		assert.Equal(t, 1200000000000, int(duration))
+	})
+
+}

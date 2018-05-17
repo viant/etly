@@ -445,8 +445,12 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 
 		}(storageTransfer)
 	}
-	//limiter.Wait()
-	wg.Wait()
+
+	duration := getTimeoutFromTransfer(transfer) * 2
+	isTimeOut := toolbox.WaitTimeout(&wg, duration)
+	if isTimeOut {
+		return nil, fmt.Errorf("transfer timed out after duration :%v", duration)
+	}
 	return result, err
 }
 
