@@ -81,7 +81,7 @@ func (s *transferService) Transfer(task *TransferTask) error {
 	default:
 		return fmt.Errorf("Unsupported source Type %v", templateTransfer.Source.Type)
 	}
-
+	log.Printf("Completed transfer: ID(%s), NAME(%s)", task.Id, task.Transfer.Name)
 	return nil
 }
 
