@@ -2,9 +2,10 @@ package etly
 
 import (
 	"fmt"
-	"github.com/viant/toolbox"
 	"log"
 	"net/http"
+
+	"github.com/viant/toolbox"
 )
 
 const uriBasePath = "/etly/"
@@ -51,6 +52,12 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 		toolbox.ServiceRouting{
 			HTTPMethod: "GET",
 			URI:        uriBasePath + "tasklist/",
+			Handler:    service.GetTasksList,
+			Parameters: []string{"@httpRequest"},
+		},
+		toolbox.ServiceRouting{
+			HTTPMethod: "GET",
+			URI:        uriBasePath + "tasklist/active",
 			Handler:    service.GetTasksList,
 			Parameters: []string{"@httpRequest"},
 		},

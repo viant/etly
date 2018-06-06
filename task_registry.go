@@ -1,6 +1,9 @@
 package etly
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 const MaxHistory = 20
 
@@ -14,11 +17,19 @@ type TaskRegistry struct {
 
 // Register a status to TaskRegistry
 func (t *TaskRegistry) Register(task *Task) {
+	if task == nil {
+		log.Printf("failed to register empty task to registry:%v", t)
+		return
+	}
 	t.activeMutex.Lock()
 	defer t.activeMutex.Unlock()
 	var tasks = make([]*Task, 0)
 	tasks = append(tasks, task)
 	for _, active := range t.Active {
+		if active == nil {
+			log.Printf("invalid task found in active task registry:%v", t)
+			continue
+		}
 		if active.Status == taskRunningStatus {
 			tasks = append(tasks, active)
 		} else {
@@ -75,6 +86,12 @@ func (t *TaskRegistry) GetAll() []*Task {
 	var result = make([]*Task, 0)
 	appendTask(t.Active, t.activeMutex, &result)
 	appendTask(t.History, t.historyMutex, &result)
+	return result
+}
+
+func (t *TaskRegistry) GetActive() []*Task {
+	var result = make([]*Task, 0)
+	appendTask(t.Active, t.activeMutex, &result)
 	return result
 }
 
