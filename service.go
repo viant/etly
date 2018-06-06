@@ -3,14 +3,15 @@ package etly
 import (
 	"errors"
 	"fmt"
-	"github.com/viant/toolbox"
-	"github.com/viant/toolbox/storage"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/storage"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -150,6 +151,16 @@ func (s *Service) GetTasksList(request http.Request) *TaskListResponse {
 	return &TaskListResponse{result[offset:limit]}
 }
 
+func (s *Service) GetActiveTasks(request http.Request) *TaskListResponse {
+	var result = s.taskRegistry.GetActive()
+	request.ParseForm()
+	offset := toolbox.AsInt(request.Form.Get("offset"))
+	limit := toolbox.AsInt(request.Form.Get("limit"))
+	if limit == 0 || limit > len(result) {
+		limit = len(result)
+	}
+	return &TaskListResponse{result[offset:limit]}
+}
 
 func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {
 	var result []*Task
