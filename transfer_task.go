@@ -3,6 +3,7 @@ package etly
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -40,6 +41,7 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 		Id:        fmt.Sprintf("%v-%v-%v", transfer.Name, now.UnixNano(), rand.NewSource(now.UnixNano()).Int63()),
 		Progress:  result.Progress,
 		StartTime: time.Now(),
+		Mutex:     &sync.Mutex{},
 	}
 	return result
 }

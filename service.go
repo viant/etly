@@ -151,15 +151,9 @@ func (s *Service) GetTasksList(request http.Request) *TaskListResponse {
 	return &TaskListResponse{result[offset:limit]}
 }
 
-func (s *Service) GetActiveTasks(request http.Request) *TaskListResponse {
-	var result = s.taskRegistry.GetActive()
-	request.ParseForm()
-	offset := toolbox.AsInt(request.Form.Get("offset"))
-	limit := toolbox.AsInt(request.Form.Get("limit"))
-	if limit == 0 || limit > len(result) {
-		limit = len(result)
-	}
-	return &TaskListResponse{result[offset:limit]}
+// Get active tasks additionally filterable by status
+func (s *Service) GetActiveTasks(status string) *TaskListResponse {
+	return &TaskListResponse{s.taskRegistry.GetActive(status)}
 }
 
 func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {

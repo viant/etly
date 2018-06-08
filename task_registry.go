@@ -16,42 +16,42 @@ type TaskRegistry struct {
 }
 
 // Register a status to TaskRegistry
-func (t *TaskRegistry) Register(task *Task) {
+func (reg *TaskRegistry) Register(task *Task) {
 	if task == nil {
-		log.Printf("failed to register empty task to registry:%v", t)
+		log.Printf("failed to register empty task to registry:%v", reg)
 		return
 	}
-	t.activeMutex.Lock()
-	defer t.activeMutex.Unlock()
+	reg.activeMutex.Lock()
+	defer reg.activeMutex.Unlock()
 	var tasks = make([]*Task, 0)
 	tasks = append(tasks, task)
-	for _, active := range t.Active {
-		if active == nil {
-			log.Printf("invalid task found in active task registry:%v", t)
+	for _, t := range reg.Active {
+		if t == nil {
+			log.Printf("invalid task found in t task registry:%v", reg)
 			continue
 		}
-		if active.Status == taskRunningStatus {
-			tasks = append(tasks, active)
+		if t.Status == taskRunningStatus || t.Status == taskTransferringStatus {
+			tasks = append(tasks, t)
 		} else {
-			t.Archive(active)
+			reg.Archive(t)
 		}
 	}
-	t.Active = tasks
+	reg.Active = tasks
 }
 
-func (t *TaskRegistry) Archive(task *Task) {
-	t.historyMutex.Lock()
-	defer t.historyMutex.Unlock()
+func (reg *TaskRegistry) Archive(task *Task) {
+	reg.historyMutex.Lock()
+	defer reg.historyMutex.Unlock()
 	var tasks = make([]*Task, 0)
 	tasks = append(tasks, task)
 
-	for _, history := range t.History {
+	for _, history := range reg.History {
 		if len(tasks) > MaxHistory {
 			break
 		}
 		tasks = append(tasks, history)
 	}
-	t.History = tasks
+	reg.History = tasks
 }
 
 func findTask(candidates []*Task, mutex sync.Locker, result *[]*Task, requested map[string]bool) {
@@ -64,15 +64,14 @@ func findTask(candidates []*Task, mutex sync.Locker, result *[]*Task, requested 
 	}
 }
 
-func (t *TaskRegistry) GetByIDs(ids ...string) []*Task {
+func (reg *TaskRegistry) GetByIDs(ids ...string) []*Task {
 	var idMap = make(map[string]bool)
 	for _, id := range ids {
 		idMap[id] = true
 	}
 	var result = make([]*Task, 0)
-	findTask(t.Active, t.activeMutex,
-		&result, idMap)
-	findTask(t.History, t.historyMutex, &result, idMap)
+	findTask(reg.Active, reg.activeMutex, &result, idMap)
+	findTask(reg.History, reg.historyMutex, &result, idMap)
 	return result
 }
 
@@ -82,16 +81,24 @@ func appendTask(candidates []*Task, mutex sync.Locker, result *[]*Task) {
 	*result = append(*result, candidates...)
 }
 
-func (t *TaskRegistry) GetAll() []*Task {
+func (reg *TaskRegistry) GetAll() []*Task {
 	var result = make([]*Task, 0)
-	appendTask(t.Active, t.activeMutex, &result)
-	appendTask(t.History, t.historyMutex, &result)
+	appendTask(reg.Active, reg.activeMutex, &result)
+	appendTask(reg.History, reg.historyMutex, &result)
 	return result
 }
 
-func (t *TaskRegistry) GetActive() []*Task {
+// Get active tasks additionally filterable by status
+func (reg *TaskRegistry) GetActive(status string) []*Task {
+	if status == "" {
+		return reg.Active
+	}
 	var result = make([]*Task, 0)
-	appendTask(t.Active, t.activeMutex, &result)
+	for _, t := range reg.Active {
+		if t.Status == status {
+			result = append(result, t)
+		}
+	}
 	return result
 }
 

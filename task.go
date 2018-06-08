@@ -1,8 +1,12 @@
 package etly
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
-const taskRunningStatus = "RUNNING"
+const taskRunningStatus = "RUNNING"           //Status when a task if picked up for processing but could be empty task with no actual transferring
+const taskTransferringStatus = "TRANSFERRING" //Status when a task get actual work for transferring
 const taskDoneStatus = "DONE"
 const taskErrorStatus = "ERROR"
 const taskOKStatus = "OK"
@@ -22,4 +26,11 @@ type Task struct {
 	StatusCode int32
 	StartTime  time.Time
 	Error      string
+	*sync.Mutex
+}
+
+func (t *Task) UpdateStatus(s string) {
+	t.Lock()
+	defer t.Unlock()
+	t.Status = s
 }
