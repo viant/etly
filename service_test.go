@@ -1,17 +1,15 @@
-package etly_test
+package etly
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
-	"testing"
-
-	"io/ioutil"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/viant/etly"
 	"github.com/viant/toolbox"
 )
 
@@ -66,14 +64,14 @@ var AppLog1ToLog2 = func(source interface{}) (interface{}, error) {
 }
 
 func init() {
-	etly.NewTransformerRegistry().Register("service_test.Log1ToLog2", Log1ToLog2)
-	etly.NewTransformerRegistry().Register("service_test.AppLog1ToLog2", AppLog1ToLog2)
+	NewTransformerRegistry().Register("service_test.Log1ToLog2", Log1ToLog2)
+	NewTransformerRegistry().Register("service_test.AppLog1ToLog2", AppLog1ToLog2)
 
-	etly.NewProviderRegistry().Register("service_test.Log1", func() interface{} {
+	NewProviderRegistry().Register("service_test.Log1", func() interface{} {
 		return &Log1{}
 	})
 
-	etly.NewProviderRegistry().Register("AppLog1.log", func() interface{} {
+	NewProviderRegistry().Register("AppLog1.log", func() interface{} {
 		return &AppLog1{}
 	})
 
@@ -81,9 +79,9 @@ func init() {
 
 func TestService_RunStorageToStorage(t *testing.T) {
 
-	var files = []string{etly.GetCurrentWorkingDir() + "test/data/out/1_file1.log",
-		etly.GetCurrentWorkingDir() + "test/data/out/0_file2.log",
-		etly.GetCurrentWorkingDir() + "test/data/out/meta.json",
+	var files = []string{GetCurrentWorkingDir() + "test/data/out/1_file1.log",
+		GetCurrentWorkingDir() + "test/data/out/0_file2.log",
+		GetCurrentWorkingDir() + "test/data/out/meta.json",
 	}
 	for _, file := range files {
 		if toolbox.FileExists(file) {
@@ -92,19 +90,19 @@ func TestService_RunStorageToStorage(t *testing.T) {
 		defer os.Remove(file)
 	}
 
-	var serverConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/server_config.json"
-	serverConfig, err := etly.NewServerConfigFromURL(serverConfigUrl)
+	var serverConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/server_config.json"
+	serverConfig, err := NewServerConfigFromURL(serverConfigUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, 300, serverConfig.TimeOut.Duration, "serverConfig.TimeOut.Duration")
 	assert.Equal(t, "milli", serverConfig.TimeOut.Unit, "serverConfig.TimeOut.Unit")
 
-	var transferConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/transfer_config1.json"
-	transferConfig, err := etly.NewTransferConfigFromURL(transferConfigUrl)
+	var transferConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/transfer_config1.json"
+	transferConfig, err := NewTransferConfigFromURL(transferConfigUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, 300, transferConfig.Transfers[0].TimeOut.Duration, "transferConfig.TimeOut.Duration")
 	assert.Equal(t, "milli", transferConfig.Transfers[0].TimeOut.Unit, "transferConfig.TimeOut.Unit")
 
-	s, err := etly.NewService(serverConfig, transferConfig)
+	s, err := NewService(serverConfig, transferConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -126,16 +124,16 @@ func TestService_RunStorageToStorage(t *testing.T) {
 }
 
 func TestService_RunStorageToDatastore(t *testing.T) {
-	var serverConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/server_config.json"
-	serverConfig, err := etly.NewServerConfigFromURL(serverConfigUrl)
-	var transferConfigUrl = "file://" + etly.GetCurrentWorkingDir() + "/test/transfer_config2.json"
-	transferConfig, err := etly.NewTransferConfigFromURL(transferConfigUrl)
+	var serverConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/server_config.json"
+	serverConfig, err := NewServerConfigFromURL(serverConfigUrl)
+	var transferConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/transfer_config2.json"
+	transferConfig, err := NewTransferConfigFromURL(transferConfigUrl)
 	assert.Nil(t, err)
 	assert.Equal(t, 300, transferConfig.Transfers[0].TimeOut.Duration, "transferConfig.TimeOut.Duration")
 	assert.Equal(t, "milli", transferConfig.Transfers[0].TimeOut.Unit, "transferConfig.TimeOut.Unit")
 
 	var files = []string{
-		etly.GetCurrentWorkingDir() + "test/ds/out/app-0-0.log",
+		GetCurrentWorkingDir() + "test/ds/out/app-0-0.log",
 	}
 	for _, file := range files {
 		if toolbox.FileExists(file) {
@@ -144,7 +142,7 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 		//defer os.Remove(file)
 	}
 
-	s, err := etly.NewService(serverConfig, transferConfig)
+	s, err := NewService(serverConfig, transferConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,4 +165,22 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestService_GetTasksFilterByStatus(t *testing.T) {
+	var serverConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/server_config.json"
+	serverConfig, _ := NewServerConfigFromURL(serverConfigUrl)
+	var transferConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/transfer_config1.json"
+	transferConfig, _ := NewTransferConfigFromURL(transferConfigUrl)
+	s, _ := NewService(serverConfig, transferConfig)
+	s.taskRegistry.Register(&Task{Id: taskRunningStatus + "task", Status: taskRunningStatus})
+	s.taskRegistry.Register(&Task{Id: taskTransferringStatus + "Task", Status: taskTransferringStatus})
+	s.taskRegistry.Register(&Task{Id: taskDoneStatus + "Task", Status: taskDoneStatus})
+	s.taskRegistry.Register(&Task{Id: taskErrorStatus + "Task", Status: taskErrorStatus})
+
+	tasks := s.GetTasksFilterByStatus(taskTransferringStatus).Tasks
+	for _, task := range tasks {
+		assert.Equal(t, taskTransferringStatus, task.Status)
+	}
+
 }
