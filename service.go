@@ -151,9 +151,19 @@ func (s *Service) GetTasksList(request http.Request) *TaskListResponse {
 	return &TaskListResponse{result[offset:limit]}
 }
 
-// Get active tasks additionally filterable by status
-func (s *Service) GetActiveTasks(status string) *TaskListResponse {
-	return &TaskListResponse{s.taskRegistry.GetActive(status)}
+// Get tasks filterable by status
+func (s *Service) GetTasksFilterByStatus(status string) *TaskListResponse {
+	tasks := s.taskRegistry.GetAll()
+	if status != "" {
+		var result = make([]*Task, 0)
+		for _, t := range tasks {
+			if t.Status == status {
+				result = append(result, t)
+			}
+		}
+		tasks = result
+	}
+	return &TaskListResponse{tasks}
 }
 
 func (s *Service) GetTasks(request http.Request, ids ...string) []*Task {

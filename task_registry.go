@@ -88,20 +88,6 @@ func (reg *TaskRegistry) GetAll() []*Task {
 	return result
 }
 
-// Get active tasks additionally filterable by status
-func (reg *TaskRegistry) GetActive(status string) []*Task {
-	if status == "" {
-		return reg.Active
-	}
-	var result = make([]*Task, 0)
-	for _, t := range reg.Active {
-		if t.Status == status {
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
 func NewTaskRegistry() *TaskRegistry {
 	return &TaskRegistry{
 		History:      make([]*Task, 0),
