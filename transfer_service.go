@@ -45,15 +45,15 @@ type transferService struct {
 }
 
 func (s *transferService) Run(task *TransferTask) (err error) {
-	task.Status = taskRunningStatus
+	task.UpdateStatus(taskRunningStatus)
 	defer func() {
 		if err != nil {
-			task.Status = taskErrorStatus
+			task.UpdateStatus(taskErrorStatus)
 			task.Error = err.Error()
 		} else if task.Error != "" {
-			task.Status = taskErrorStatus
+			task.UpdateStatus(taskErrorStatus)
 		} else {
-			task.Status = taskDoneStatus
+			task.UpdateStatus(taskDoneStatus)
 		}
 	}()
 	err = s.Transfer(task)
@@ -208,6 +208,7 @@ outer:
 				break outer
 			}
 			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError); err != nil {
+				log.Printf("error when transferDataInBatch: %v", err)
 				break outer
 			}
 
@@ -249,6 +250,7 @@ outer:
 		}
 	}
 	if err != nil || completed {
+		log.Printf("transferDataInBatch completed=%v", completed)
 		log.Printf("failed to log: %v", err)
 		return true, err
 	}
@@ -298,7 +300,7 @@ func (s *transferService) transferInTheBackground(recordChannel chan map[string]
 			defer func() {
 				if err != nil {
 					log.Printf("transferInTheBackground err: %v", err)
-					task.Status = "error"
+					task.UpdateStatus(taskErrorStatus)
 					task.Error = err.Error()
 					atomic.StoreInt32(&task.StatusCode, StatusTaskNotRunning)
 				}
@@ -400,6 +402,8 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		log.Printf("Finish, no candidate to process for %s\n", transfer.Name)
 		return nil, nil
 	}
+
+	task.UpdateStatus(taskTransferringStatus)
 
 	if !transfer.HasVariableExtraction() {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
@@ -551,6 +555,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 			err = e
 		}
 	}()
+	task.UpdateStatus(taskTransferringStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -665,6 +670,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 		logger.Println("no candidates no process")
 		return nil, nil
 	}
+	task.UpdateStatus(taskTransferringStatus)
 	if transfer.MaxParallelTransfers == 0 {
 		transfer.MaxParallelTransfers = 4
 	}

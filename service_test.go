@@ -6,12 +6,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/viant/etly"
-	"github.com/viant/toolbox"
 	"io/ioutil"
 	"strings"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/viant/etly"
+	"github.com/viant/toolbox"
 )
 
 type Log1 struct {
@@ -140,7 +141,7 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 		if toolbox.FileExists(file) {
 			os.Remove(file)
 		}
-		defer os.Remove(file)
+		//defer os.Remove(file)
 	}
 
 	s, err := etly.NewService(serverConfig, transferConfig)
@@ -150,11 +151,11 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 	err = s.Run()
 
 	if assert.Nil(t, err) {
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 		response := s.ProcessingStatus("meta")
 		assert.Equal(t, "", response.Error)
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 		for _, file := range files {
 			if assert.True(t, toolbox.FileExists(file)) {
 				content, _ := ioutil.ReadFile(file)

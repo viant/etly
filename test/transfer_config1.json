@@ -8,7 +8,7 @@
         "DataType": "service_test.Log1"
       },
       "Target":{
-        "Name": "file://<pwd>/target.json",
+        "Name": "file://<pwd>test/data/out/<mod:2>_<file>",
         "Type": "url",
         "DataFormat": "ndjson"
       },
