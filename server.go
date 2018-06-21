@@ -58,7 +58,7 @@ func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, e
 		toolbox.ServiceRouting{
 			HTTPMethod: "GET",
 			URI:        uriBasePath + "tasks",
-			Handler:    service.GetTasksFilterByStatus,
+			Handler:    service.GetTasksByStatus,
 			Parameters: []string{"status"},
 		},
 		toolbox.ServiceRouting{

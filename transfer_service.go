@@ -399,12 +399,9 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		log.Printf("Finish, no candidate to process for %s\n", transfer.Name)
+		log.Printf("Finish, no candidate to process for %v\n", transfer.Source.Name)
 		return nil, nil
 	}
-
-	task.UpdateStatus(taskTransferringStatus)
-
 	if !transfer.HasVariableExtraction() {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,

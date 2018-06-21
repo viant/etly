@@ -9,10 +9,12 @@ const MaxHistory = 20
 
 // TaskRegistry contains list of active and finished tasks.
 type TaskRegistry struct {
-	activeMutex  *sync.Mutex
-	historyMutex *sync.Mutex
-	Active       []*Task
-	History      []*Task
+	activeMutex   *sync.Mutex
+	transferMutex *sync.Mutex
+	historyMutex  *sync.Mutex
+	Active        []*Task
+	Transferring  []*Task
+	History       []*Task
 }
 
 // Register a status to TaskRegistry
@@ -21,24 +23,82 @@ func (reg *TaskRegistry) Register(task *Task) {
 		log.Printf("failed to register empty task to registry:%v", reg)
 		return
 	}
-	reg.activeMutex.Lock()
-	defer reg.activeMutex.Unlock()
-	var tasks = make([]*Task, 0)
-	tasks = append(tasks, task)
-	for _, t := range reg.Active {
-		if t == nil {
-			log.Printf("invalid task found in t task registry:%v", reg)
-			continue
-		}
-		if t.Status == taskRunningStatus || t.Status == taskTransferringStatus {
-			tasks = append(tasks, t)
-		} else {
-			reg.Archive(t)
-		}
-	}
-	reg.Active = tasks
+	reg.addActive(task)
+
+	//Refresh registry
+	reg.refreshRegistries()
 }
 
+// Update a registry to contain only tasks for its state. Others are segregated according to new state
+func (reg *TaskRegistry) updateRegistry(oldTasks []*Task, m *sync.Mutex, taskState string) []*Task {
+	var tasks = make([]*Task, 0)
+	m.Lock()
+	defer m.Unlock()
+	for _, t := range oldTasks {
+		if t == nil {
+			log.Printf("invalid task found in task registry for state:%v", taskState)
+			continue
+		}
+		if t.Status == taskState {
+			tasks = append(tasks, t)
+		} else {
+			//State has changed. Put to appropriate registry.
+			//Managing generically so has cases for all the states and need to check again for taskState to skip it
+			switch t.Status {
+			case taskRunningStatus:
+				if t.Status == taskState {
+					continue
+				}
+				reg.addActive(t)
+			case taskTransferringStatus:
+				if t.Status == taskState {
+					continue
+				}
+				reg.addTransferring(t)
+			case taskErrorStatus:
+			case taskDoneStatus:
+				if t.Status == taskState {
+					continue
+				}
+				reg.addArchive(t)
+			}
+		}
+	}
+	return tasks
+}
+
+func (reg *TaskRegistry) addActive(task *Task) {
+	reg.activeMutex.Lock()
+	defer reg.activeMutex.Unlock()
+	if task.Status != taskRunningStatus {
+		task.UpdateStatus(taskRunningStatus)
+	}
+	reg.Active = append(reg.Active, task)
+}
+
+func (reg *TaskRegistry) addTransferring(task *Task) {
+	reg.transferMutex.Lock()
+	defer reg.transferMutex.Unlock()
+	reg.Transferring = append(reg.Transferring, task)
+}
+
+func (reg *TaskRegistry) addArchive(task *Task) {
+	reg.historyMutex.Lock()
+	defer reg.historyMutex.Unlock()
+	reg.History = append(reg.History, task)
+	if len(reg.History) > MaxHistory {
+		var tasks = make([]*Task, 0)
+		for _, t := range reg.History {
+			if len(tasks) > MaxHistory {
+				break
+			}
+			tasks = append(tasks, t)
+		}
+		reg.History = tasks
+	}
+}
+
+// Deprecated: Use addArchive method instead
 func (reg *TaskRegistry) Archive(task *Task) {
 	reg.historyMutex.Lock()
 	defer reg.historyMutex.Unlock()
@@ -84,15 +144,42 @@ func appendTask(candidates []*Task, mutex sync.Locker, result *[]*Task) {
 func (reg *TaskRegistry) GetAll() []*Task {
 	var result = make([]*Task, 0)
 	appendTask(reg.Active, reg.activeMutex, &result)
+	appendTask(reg.Transferring, reg.transferMutex, &result)
 	appendTask(reg.History, reg.historyMutex, &result)
 	return result
 }
 
+func (reg *TaskRegistry) GetByStatus(status string) []*Task {
+	var tasks = make([]*Task, 0)
+
+	//Refresh registries
+	reg.refreshRegistries()
+
+	switch status {
+	case taskRunningStatus:
+		appendTask(reg.Active, reg.activeMutex, &tasks)
+	case taskTransferringStatus:
+		appendTask(reg.Transferring, reg.transferMutex, &tasks)
+	case taskErrorStatus: //Error was not maintained previously as a seperate registry. Keeping it as it until there is a need for it
+	case taskDoneStatus:
+		appendTask(reg.History, reg.historyMutex, &tasks)
+	}
+	return tasks
+}
+
+// Helper to refresh registries
+func (reg *TaskRegistry) refreshRegistries() {
+	reg.Active = reg.updateRegistry(reg.Active, reg.activeMutex, taskRunningStatus)
+	reg.Transferring = reg.updateRegistry(reg.Transferring, reg.transferMutex, taskTransferringStatus)
+}
+
 func NewTaskRegistry() *TaskRegistry {
 	return &TaskRegistry{
-		History:      make([]*Task, 0),
-		Active:       make([]*Task, 0),
-		activeMutex:  &sync.Mutex{},
-		historyMutex: &sync.Mutex{},
+		History:       make([]*Task, 0),
+		Active:        make([]*Task, 0),
+		Transferring:  make([]*Task, 0),
+		activeMutex:   &sync.Mutex{},
+		transferMutex: &sync.Mutex{},
+		historyMutex:  &sync.Mutex{},
 	}
 }

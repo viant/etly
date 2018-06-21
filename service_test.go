@@ -106,9 +106,11 @@ func TestService_RunStorageToStorage(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = s.Run()
+	err = s.Start()
 
-	time.Sleep(1 * time.Second)
+	//err = s.Run()
+
+	time.Sleep(10 * time.Second)
 	for _, file := range files {
 		assert.True(t, toolbox.FileExists(file))
 	}
@@ -167,20 +169,33 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 	}
 }
 
-func TestService_GetTasksFilterByStatus(t *testing.T) {
+func TestService_GetTasksByStatus(t *testing.T) {
+
+	var files = []string{GetCurrentWorkingDir() + "test/data/out/1_file1.log",
+		GetCurrentWorkingDir() + "test/data/out/0_file2.log",
+		GetCurrentWorkingDir() + "test/data/out/meta.json",
+	}
+	for _, file := range files {
+		if toolbox.FileExists(file) {
+			os.Remove(file)
+		}
+		defer os.Remove(file)
+	}
+
 	var serverConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/server_config.json"
 	serverConfig, _ := NewServerConfigFromURL(serverConfigUrl)
 	var transferConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/transfer_config1.json"
 	transferConfig, _ := NewTransferConfigFromURL(transferConfigUrl)
-	s, _ := NewService(serverConfig, transferConfig)
-	s.taskRegistry.Register(&Task{Id: taskRunningStatus + "task", Status: taskRunningStatus})
-	s.taskRegistry.Register(&Task{Id: taskTransferringStatus + "Task", Status: taskTransferringStatus})
-	s.taskRegistry.Register(&Task{Id: taskDoneStatus + "Task", Status: taskDoneStatus})
-	s.taskRegistry.Register(&Task{Id: taskErrorStatus + "Task", Status: taskErrorStatus})
-
-	tasks := s.GetTasksFilterByStatus(taskTransferringStatus).Tasks
-	for _, task := range tasks {
-		assert.Equal(t, taskTransferringStatus, task.Status)
-	}
-
+	s, e := NewServer(serverConfig, transferConfig)
+	assert.Nil(t, e)
+	go func() {
+		s.Start()
+	}()
+	time.Sleep(2 * time.Second)
+	response := &TaskListResponse{}
+	err := toolbox.RouteToService("get", "http://127.0.0.1:8081/etly/tasks?status=DONE", nil, &response)
+	assert.Nil(t, err)
+	assert.NotNil(t, response)
+	assert.NotNil(t, response.Tasks)
+	assert.Condition(t, func() bool { return len(response.Tasks) >= 1 })
 }

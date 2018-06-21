@@ -1,6 +1,7 @@
 package etly
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -32,5 +33,8 @@ type Task struct {
 func (t *Task) UpdateStatus(s string) {
 	t.Lock()
 	defer t.Unlock()
+	if t.Status == taskTransferringStatus || s == taskTransferringStatus {
+		log.Printf("Changing to %v state from %v state for task:%v", s, t.Status, t.Id)
+	}
 	t.Status = s
 }
