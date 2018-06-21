@@ -3,6 +3,7 @@ package etly
 import (
 	"bytes"
 	"hash/fnv"
+	"log"
 	"net/url"
 	"os"
 	"path"
@@ -174,6 +175,7 @@ func appendContentObject(storageService storage.Service, folderURL string, colle
 	if err != nil {
 		return err
 	}
+	log.Printf("# of storage objects from %v=%v", folderURL, len(storageObjects))
 	for _, objectStorage := range storageObjects {
 		if objectStorage.IsFolder() {
 			if objectStorage.URL() != folderURL {
