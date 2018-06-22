@@ -85,17 +85,16 @@ func (reg *TaskRegistry) addTransferring(task *Task) {
 func (reg *TaskRegistry) addArchive(task *Task) {
 	reg.historyMutex.Lock()
 	defer reg.historyMutex.Unlock()
-	reg.History = append(reg.History, task)
-	if len(reg.History) > MaxHistory {
-		var tasks = make([]*Task, 0)
-		for _, t := range reg.History {
-			if len(tasks) > MaxHistory {
-				break
-			}
-			tasks = append(tasks, t)
+	var tasks = make([]*Task, 0)
+	tasks = append(tasks, task)
+
+	for _, history := range reg.History {
+		if len(tasks) > MaxHistory {
+			break
 		}
-		reg.History = tasks
+		tasks = append(tasks, history)
 	}
+	reg.History = tasks
 }
 
 // Deprecated: Use addArchive method instead
