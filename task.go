@@ -8,6 +8,7 @@ import (
 
 const taskRunningStatus = "RUNNING"           //Status when a task if picked up for processing but could be empty task with no actual transferring
 const taskTransferringStatus = "TRANSFERRING" //Status when a task get actual work for transferring
+const taskNoopStatus = "NOOP"                 //Status when a task completes with picking up an actual transfer
 const taskDoneStatus = "DONE"
 const taskErrorStatus = "ERROR"
 const taskOKStatus = "OK"
