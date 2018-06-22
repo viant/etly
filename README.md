@@ -160,9 +160,9 @@ func main() {
 
   - check service status 
     
-        http://127.0.0.1:8081/etly/status
+        http://127.0.0.1:8090/etly/status
         
-        http://127.0.0.1:8081/etly/tasks/
+        http://127.0.0.1:8090/etly/tasks?status=DONE
        
         
  
