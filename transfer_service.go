@@ -52,8 +52,11 @@ func (s *transferService) Run(task *TransferTask) (err error) {
 			task.Error = err.Error()
 		} else if task.Error != "" {
 			task.UpdateStatus(taskErrorStatus)
-		} else {
+		} else if (task.Progress != nil) && (task.Progress.FileProcessed > 0 && task.Progress.RecordProcessed > 0) {
 			task.UpdateStatus(taskDoneStatus)
+		} else {
+			//Default: Did not perform any transfer operation
+			task.UpdateStatus(taskNoopStatus)
 		}
 	}()
 	err = s.Transfer(task)
