@@ -61,6 +61,8 @@ func (reg *TaskRegistry) updateRegistry(oldTasks []*Task, m *sync.Mutex, taskSta
 					continue
 				}
 				reg.addArchive(t)
+			case taskNoopStatus:
+				//Did not perform any task so we do not have archive this no operation task
 			}
 		}
 	}
