@@ -193,7 +193,7 @@ func TestService_GetTasksByStatus(t *testing.T) {
 	}()
 	time.Sleep(2 * time.Second)
 	response := &TaskListResponse{}
-	err := toolbox.RouteToService("get", "http://127.0.0.1:8081/etly/tasks?status=DONE", nil, &response)
+	err := toolbox.RouteToService("get", "http://127.0.0.1:8090/etly/tasks?status=DONE", nil, &response)
 	assert.Nil(t, err)
 	assert.NotNil(t, response)
 	assert.NotNil(t, response.Tasks)
