@@ -2,17 +2,14 @@ package etly
 
 import (
 	"bytes"
+	"fmt"
 	"hash/fnv"
-	"log"
+	"io"
 	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
-
-	"io"
-
-	"fmt"
 
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
@@ -175,7 +172,6 @@ func appendContentObject(storageService storage.Service, folderURL string, colle
 	if err != nil {
 		return err
 	}
-	log.Printf("# of storage objects from %v=%v", folderURL, len(storageObjects))
 	for _, objectStorage := range storageObjects {
 		if objectStorage.IsFolder() {
 			if objectStorage.URL() != folderURL {
