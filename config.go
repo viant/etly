@@ -30,6 +30,7 @@ type Transfer struct {
 	lock                 sync.Mutex
 	TimeOut              *Duration //Configured timeout for a transfer
 	Repeat               int//in transferOnce number of execution
+	ContentEnricher		 string
 }
 
 func (t *Transfer) HasVariableExtraction() bool {
@@ -214,6 +215,7 @@ func (t *Transfer) Clone() *Transfer {
 		Transformer:          t.Transformer,
 		VariableExtraction:   t.VariableExtraction,
 		Filter:               t.Filter,
+		ContentEnricher:	  t.ContentEnricher,
 	}
 }
 

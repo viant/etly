@@ -181,6 +181,7 @@ func (s *transferService) expandTransferWithVariableExpression(transfer *Transfe
 func (s *transferService) transferDataInBatch(recordChannel chan map[string]interface{}, transfer *Transfer, task *TransferTask, fetchedCompleted *int32, threadId int) (completed bool, err error) {
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
+	contentEnricher := NewContentEnricherRegistry().registry[transfer.ContentEnricher]
 	var transformedTargets TargetTransformations = make(map[string]*TargetTransformation)
 	predicate := NewFilterRegistry().registry[transfer.Filter]
 	var decodingError = &decodingError{}
@@ -210,7 +211,7 @@ outer:
 			if err != nil {
 				break outer
 			}
-			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError); err != nil {
+			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError,contentEnricher,nil); err != nil {
 				log.Printf("error when transferDataInBatch: %v", err)
 				break outer
 			}

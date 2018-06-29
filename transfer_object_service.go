@@ -109,7 +109,7 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 	}
 
 	if transfer.Source.DataFormat == "ndjson" {
-		var processedTransfers, err = s.transferObjectFromNdjson(content, transfer, task)
+		var processedTransfers, err = s.transferObjectFromNdjson(content, request, task)
 		task.Progress.FileProcessed++
 		var response = &TransferObjectResponse{
 			RecordProcessed: int(task.Progress.RecordProcessed),
@@ -160,7 +160,8 @@ func getTargetKey(transfer *Transfer, source, target interface{}, state map[stri
 	return result, nil
 }
 
-func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer *Transfer, task *TransferTask) ([]*ProcessedTransfer, error) {
+func (s *transferObjectService) transferObjectFromNdjson(source []byte, request *TransferObjectRequest, task *TransferTask) ([]*ProcessedTransfer, error) {
+	transfer := request.Transfer
 	dataTypeProvider := NewProviderRegistry().registry[transfer.Source.DataType]
 	transformer := NewTransformerRegistry().registry[transfer.Transformer]
 
@@ -169,7 +170,7 @@ func (s *transferObjectService) transferObjectFromNdjson(source []byte, transfer
 	predicate := NewFilterRegistry().registry[transfer.Filter]
 	var decodingError = &decodingError{}
 	var state = make(map[string]interface{})
-
+	contentEnricher := NewContentEnricherRegistry().registry[transfer.ContentEnricher]
 outer:
 	for _, line := range lines {
 		if len(line) == 0 {
@@ -192,7 +193,7 @@ outer:
 				}
 			}
 		}
-		err := transferRecord(state, predicate, dataTypeProvider, line, transformer, transfer, transformedTargets, task, decodingError)
+		err := transferRecord(state, predicate, dataTypeProvider, line, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, request)
 		if err != nil {
 			return nil, err
 		}
