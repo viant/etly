@@ -12,7 +12,7 @@ type decodingError struct {
 	count int
 }
 
-func transferRecord(state map[string]interface{}, predicate toolbox.Predicate, dataTypeProvider func() interface{}, encoded []byte, transformer Transformer, transfer *Transfer, transformedTargets map[string]*TargetTransformation, task *TransferTask, decodingError *decodingError) error {
+func transferRecord(state map[string]interface{}, predicate toolbox.Predicate, dataTypeProvider func() interface{}, encoded []byte, transformer Transformer, transfer *Transfer, transformedTargets map[string]*TargetTransformation, task *TransferTask, decodingError *decodingError, contentEnricher ContentEnricher, request *TransferObjectRequest) error {
 	record := dataTypeProvider()
 	err := decodeJSONTarget(encoded, record)
 	if err != nil {
@@ -22,6 +22,13 @@ func transferRecord(state map[string]interface{}, predicate toolbox.Predicate, d
 			return fmt.Errorf("reached max errors %v", decodingError)
 		}
 		return nil
+	}
+
+	if contentEnricher != nil {
+		record, err = contentEnricher(record, request)
+		if err != nil {
+			return fmt.Errorf("failed to add content %v", err)
+		}
 	}
 
 	if predicate == nil || predicate.Apply(record) {
