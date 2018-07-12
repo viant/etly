@@ -52,7 +52,7 @@ func (s *transferService) Run(task *TransferTask) (err error) {
 			task.Error = err.Error()
 		} else if task.Error != "" {
 			task.UpdateStatus(taskErrorStatus)
-		} else if (task.Progress != nil) && (task.Progress.FileProcessed > 0 && task.Progress.RecordProcessed > 0) {
+		} else if (task.Progress != nil) && (task.Progress.FileProcessed > 0 || task.Progress.RecordProcessed > 0) {
 			task.UpdateStatus(taskDoneStatus)
 		} else {
 			//Default: Did not perform any transfer operation
@@ -211,7 +211,7 @@ outer:
 			if err != nil {
 				break outer
 			}
-			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError,contentEnricher,nil); err != nil {
+			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, nil); err != nil {
 				log.Printf("error when transferDataInBatch: %v", err)
 				break outer
 			}
