@@ -37,6 +37,12 @@ func (s *Server) Start() (err error) {
 	return nil
 }
 
+//Shutdown server (Provided explicitly for graceful shutdown)
+func (s *Server) Stop() (err error) {
+	//Stopping the transferring service
+	return s.Stop()
+}
+
 func NewServer(config *ServerConfig, transferConfig *TransferConfig) (*Server, error) {
 	service, err := NewService(config, transferConfig)
 	if err != nil {
