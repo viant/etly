@@ -18,6 +18,7 @@ import (
 	"github.com/viant/etly/pkg/bigquery"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
+	"context"
 )
 
 const (
@@ -42,6 +43,7 @@ func compileRegExpr(expr string) (*regexp.Regexp, error) {
 
 type transferService struct {
 	transferObjectService TransferObjectService
+	context               context.Context
 }
 
 func (s *transferService) Run(task *TransferTask) (err error) {
@@ -97,7 +99,6 @@ func (s *transferService) transferDataFromDatastoreSources(transfers []*Transfer
 	}
 	return nil
 }
-
 func (s *transferService) transferDataFromURLSources(transfers []*Transfer, task *TransferTask) error {
 	for i, transfer := range transfers {
 		_, err := s.transferDataFromURLSource(i, transfer, task)
@@ -595,7 +596,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	task.UpdateElapsed()
 
 	logger.Printf("loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
-	status, jobId, err := bigquery.New().Load(job)
+	status, jobId, err := bigquery.NewWithContext(s.context).Load(job)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute GBQ load job: %v", err)
 	}
@@ -837,8 +838,9 @@ func (s *transferService) getTransferForTimeWindow(transfer *Transfer) ([]*Trans
 	return result, nil
 }
 
-func newTransferService(transferObjectService TransferObjectService) *transferService {
+func newTransferService(context context.Context, transferObjectService TransferObjectService) *transferService {
 	return &transferService{
 		transferObjectService: transferObjectService,
+		context:               context,
 	}
 }

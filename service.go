@@ -12,6 +12,7 @@ import (
 
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
+	"context"
 )
 
 var logger = log.New(os.Stderr, "", log.Ldate|log.Ltime|log.Lshortfile)
@@ -265,6 +266,10 @@ func (s *Service) Stop() {
 }
 
 func NewService(config *ServerConfig, transferConfig *TransferConfig) (*Service, error) {
+	return NewServiceWithContext(context.TODO(), config, transferConfig)
+}
+
+func NewServiceWithContext(context context.Context, config *ServerConfig, transferConfig *TransferConfig) (*Service, error) {
 	taskRegistry := NewTaskRegistry()
 	var transferObjectService TransferObjectService
 	if len(config.Cluster) == 0 {
@@ -272,7 +277,7 @@ func NewService(config *ServerConfig, transferConfig *TransferConfig) (*Service,
 	} else {
 		transferObjectService = newTransferObjectServiceClient(config.Cluster, config.TimeOut)
 	}
-	transferService := newTransferService(transferObjectService)
+	transferService := newTransferService(context, transferObjectService)
 	var result = &Service{
 		config:                config,
 		transferConfig:        transferConfig,
