@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/viant/toolbox"
+	"context"
 )
 
 type Log1 struct {
@@ -144,7 +145,8 @@ func TestService_RunStorageToDatastore(t *testing.T) {
 		//defer os.Remove(file)
 	}
 
-	s, err := NewService(serverConfig, transferConfig)
+	ctx := context.Background()
+	s, err := NewServiceWithContext(ctx, serverConfig, transferConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -186,7 +188,8 @@ func TestService_GetTasksByStatus(t *testing.T) {
 	serverConfig, _ := NewServerConfigFromURL(serverConfigUrl)
 	var transferConfigUrl = "file://" + GetCurrentWorkingDir() + "/test/transfer_config1.json"
 	transferConfig, _ := NewTransferConfigFromURL(transferConfigUrl)
-	s, e := NewServer(serverConfig, transferConfig)
+	ctx := context.Background()
+	s, e := NewServerWithContext(ctx, serverConfig, transferConfig)
 	assert.Nil(t, e)
 	go func() {
 		s.Start()

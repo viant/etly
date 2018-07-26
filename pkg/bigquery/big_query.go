@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"cloud.google.com/go/bigquery"
 	"google.golang.org/api/option"
 	"os"
+	"log"
 )
 
 // Service provides loading capability from Cloud Storage to BigQuery
@@ -19,7 +19,9 @@ type Service interface {
 	Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error)
 }
 
-type gbqService struct{}
+type gbqService struct{
+	context context.Context
+}
 
 // LoadJob contains all necessary information for GBQ Service to perform its task
 type LoadJob struct {
@@ -42,7 +44,16 @@ const (
 
 // New constructs a bigquery service
 func New() Service {
-	return &gbqService{}
+	return &gbqService{
+		context.TODO(),
+	}
+}
+
+// New constructs a bigquery service
+func NewWithContext(context context.Context) Service {
+	return &gbqService{
+		context,
+	}
 }
 
 func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error) {
@@ -53,9 +64,9 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 		"Ts", strconv.FormatInt(time.Now().Unix(), 10))
 	credential := strings.Replace(loadJob.Credential, "${env.HOME}", os.Getenv("HOME"), 1)
 	clientOption := option.WithServiceAccountFile(credential)
-	ctx := context.Background()
+	//ctx := context.Background() // Now passed from upstream via Constructor to perform graceful shutdown
 
-	client, err := bigquery.NewClient(ctx, loadJob.ProjectID, clientOption)
+	client, err := bigquery.NewClient(sv.context, loadJob.ProjectID, clientOption)
 	if err != nil {
 		return nil, jobID, err
 	}
@@ -68,7 +79,7 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	}
 	ref.SourceFormat = bigquery.JSON
 	dataset := client.DatasetInProject(loadJob.ProjectID, loadJob.DatasetID)
-	if err := dataset.Create(ctx, nil); err != nil {
+	if err := dataset.Create(sv.context, nil); err != nil {
 		// Create dataset if it does exist, otherwise ignore duplicate error
 		if !strings.Contains(err.Error(), ErrorDuplicate) {
 			return nil, jobID, err
@@ -78,11 +89,17 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	loader.CreateDisposition = bigquery.CreateIfNeeded
 	loader.WriteDisposition = bigquery.WriteAppend
 	loader.JobID = jobID
-	job, err := loader.Run(ctx)
+	job, err := loader.Run(sv.context)
 	if err != nil {
 		return nil, jobID, err
 	}
-	status, err := job.Wait(ctx)
+	status, err := job.Wait(sv.context)
+	if err != nil && sv.context.Err() == context.Canceled {
+		log.Printf(" Cancelling Job %v due to %v \n",jobID, err.Error())
+		if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
+			err = cancelErr
+		}
+	}
 	return status, jobID, err
 }
 
