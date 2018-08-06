@@ -17,7 +17,7 @@ import (
 
 const timeVariableExpr = "<dateFormat:"
 const modeVarableExpr = "<mod:"
-const userVariableExpr = "${env.USER}"
+const userVariableExpr = "##env.USER##"
 
 var jsonDecoderFactory = toolbox.NewJSONDecoderFactory()
 var jsonEncoderFactory = toolbox.NewJSONEncoderFactory()
