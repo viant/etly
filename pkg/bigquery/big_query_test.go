@@ -7,9 +7,13 @@ import (
 	"strings"
 	"context"
 	"time"
-	"github.com/stretchr/testify/assert"
 
 	"cloud.google.com/go/bigquery"
+	"errors"
+	"github.com/viant/assertly"
+	_ "github.com/viant/bgc"
+	"github.com/viant/dsunit"
+	"fmt"
 )
 
 var gopath string
@@ -61,17 +65,21 @@ func TestGbqService_Load(t *testing.T) {
 	//TODO: Clean up test files and tables
 }
 
-func TestGbqService_LoadCancelContext(t *testing.T) {
-	//TODO: Create etly_test_errors bucket manually and upload test file.
-	//TODO: Add service account (secret) as bucket owner/admin
+func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
+	type response struct {
+		status *bigquery.JobStatus
+		err    error
+	}
+	type usecase struct {
+		description string
+		job    *LoadJob
+		wait   time.Duration
+		expected    *response
+		chk    int
+	}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	// Change credential to match local secret
-	//credential := gopath + "/src/github.com/viant/etly/test/secret/bq-upload_secret.json"
 	credential := "${env.HOME}/.secret/bq.json"
 	credential = strings.Replace(credential, "${env.HOME}", os.Getenv("HOME"), 1)
-	svc := NewWithContext(ctx)
 	schema, err := SchemaFromFile("file://" + gopath + "/src/github.com/viant/etly/test/data/schema/SampleSchema.json")
 	if err != nil {
 		t.Fatalf("cannot load schema: %v", err)
@@ -80,70 +88,90 @@ func TestGbqService_LoadCancelContext(t *testing.T) {
 		"gs://etly_test_errors_2/test/cancel_test_01.json.gz",
 	}
 
-	job := &LoadJob{
-		ProjectID:  "tech-ops-poc",
-		Schema:     schema,
-		Credential: credential,
-		DatasetID:  "etly_test",
-		TableID:    "etly_errors_2",
-		URIs:       URIs,
+	URIs_2 := []string{
+		"gs://etly_test_errors_2/test/cancel_test_02.json.gz",
 	}
-	go func() {
-		log.Println("Waiting to cancel Context... ")
-		time.Sleep(30 * time.Second)
-		//cancel a little after loader Runs
-		cancel()
-		log.Println(" Called Context Cancel  ")
-	}()
-	status, jobId, err := svc.Load(job)
-	t.Log(" Exited from Job ", jobId)
-	assert.Nil(t, status)
-	assert.NotNil(t, err)
-	assert.Equal(t,"context canceled", err.Error())
-	//TODO: Clean up test files and tables
+
+	var useCases = []*usecase(nil)
+
+	useCases = append(useCases,&usecase{
+		description: "Load Job Cancel ",
+		expected: &response{
+			status: nil,
+			err: errors.New("ccontext canceled"),
+
+		},
+		job: &LoadJob{
+			ProjectID:  "tech-ops-poc",
+			Schema:     schema,
+			Credential: credential,
+			DatasetID:  "etly_test",
+			TableID:    "etly_errors_2",
+			URIs:       URIs,
+		},
+		wait:15,
+		chk:dsunit.FullTableDatasetCheckPolicy,
+	})
+
+	useCases = append(useCases,&usecase{
+		description: "Load Job Cancel Long Wait ",
+		expected: &response{
+			status: &bigquery.JobStatus{
+				State:bigquery.Done,
+			},
+			err: nil,
+
+		},
+		job: &LoadJob{
+			ProjectID:  "tech-ops-poc",
+			Schema:     schema,
+			Credential: credential,
+			DatasetID:  "etly_test",
+			TableID:    "etly_errors_2",
+			URIs:       URIs_2,
+		},
+		wait:15,		chk:dsunit.SnapshotDatasetCheckPolicy,
+	})
+
+	i := 1
+	for _,useCase := range useCases {
+
+		if dsunit.InitFromURL(t, "test/config/init.yaml") {
+			if !dsunit.PrepareFor(t, "etly_test", "test/data", fmt.Sprintf("use_case_%d",i)) {
+				return
+			}
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
+			svc := NewWithContext(ctx)
+			go waiter(useCase.wait, cancel)
+			resultStatus, jobId, resultErr := svc.Load(useCase.job)
+			t.Log(" Exited from Job ", jobId)
+			res := &response{
+				status: resultStatus,
+				err: resultErr,
+			}
+			assertly.AssertValues(t, useCase.expected, res)
+
+			dsunit.ExpectFor(t, "etly_test", useCase.chk, "test/data", fmt.Sprintf("use_case_%d",i))
+			i++
+		}
+
+	}
+
+
 }
 
-func TestGbqService_LoadCancelContextLongWait(t *testing.T) { //Negative test for cancel, Expect table with data to be created
-	//TODO: Create etly_test_errors bucket manually and upload test file.
-	//TODO: Add service account (secret) as bucket owner/admin
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	// Change credential to match local secret
-	//credential := gopath + "/src/github.com/viant/etly/test/secret/bq-upload_secret.json"
-	credential := "${env.HOME}/.secret/bq.json"
-	credential = strings.Replace(credential, "${env.HOME}", os.Getenv("HOME"), 1)
-	svc := NewWithContext(ctx)
-	schema, err := SchemaFromFile("file://" + gopath + "/src/github.com/viant/etly/test/data/schema/SampleSchema.json")
-	if err != nil {
-		t.Fatalf("cannot load schema: %v", err)
-	}
-	URIs := []string{
-		"gs://etly_test_errors_2/test/cancel_test_01.json.gz",
-	}
-
-	job := &LoadJob{
-		ProjectID:  "tech-ops-poc",
-		Schema:     schema,
-		Credential: credential,
-		DatasetID:  "etly_test",
-		TableID:    "etly_errors_2",
-		URIs:       URIs,
-	}
-	go func() {
-		log.Println("Waiting until test ends to cancel Context... ")
-		time.Sleep(600 * time.Second)
-		//cancel after loader Run finishes or test ends
-		cancel()
-		log.Println(" Called Context Cancel  ")
-	}()
-	status, jobId, err := svc.Load(job)
-	t.Log(" Exited from Job ", jobId)
-	assert.NotNil(t, status)
-	assert.Nil(t, err)
-	assert.Equal(t,status.State, bigquery.Done)
-	//TODO: Clean up test files and tables
+func waiter(waitTime time.Duration, cancel context.CancelFunc) {
+	log.Println("Waiting to cancel Context... ")
+	time.Sleep(waitTime * time.Second)
+	//cancel after loader Run finishes or test ends
+	cancel()
+	log.Println(" Called Context Cancel  ")
 }
+
+
+
 
 
 
