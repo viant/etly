@@ -49,6 +49,7 @@ func TestGbqService_Load(t *testing.T) {
 		DatasetID:  "etly_test",
 		TableID:    "etly_errors",
 		URIs:       URIs,
+		FailRetry:  3,
 	}
 	status, msg, err := svc.Load(job)
 	t.Logf("Status: %+v\n", status)
@@ -108,6 +109,7 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 			DatasetID:  "etly_test",
 			TableID:    "etly_errors_2",
 			URIs:       URIs,
+			FailRetry:  3,
 		},
 		wait:15,
 		chk:dsunit.FullTableDatasetCheckPolicy,
@@ -129,6 +131,7 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 			DatasetID:  "etly_test",
 			TableID:    "etly_errors_2",
 			URIs:       URIs_2,
+			FailRetry:  3,
 		},
 		wait:15,		chk:dsunit.SnapshotDatasetCheckPolicy,
 	})
