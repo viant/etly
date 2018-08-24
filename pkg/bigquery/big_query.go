@@ -10,6 +10,7 @@ import (
 	"google.golang.org/api/option"
 	"os"
 	"log"
+	"math"
 )
 
 // Service provides loading capability from Cloud Storage to BigQuery
@@ -31,6 +32,7 @@ type LoadJob struct {
 	ProjectID  string
 	Schema     bigquery.Schema
 	URIs       []string
+	FailRetry  int
 }
 
 const (
@@ -62,13 +64,26 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 		"DatasetID", loadJob.DatasetID,
 		"TableID", loadJob.TableID,
 		"Ts", strconv.FormatInt(time.Now().Unix(), 10))
+	var status *bigquery.JobStatus
+	var err error
+	for j:=0; j<loadJob.FailRetry; j++ {
+		status, err = sv.loadJobId(loadJob, jobID)
+		if(sv.context.Err() == context.Canceled ||  err == nil) {
+			break
+		}
+		log.Printf(" Error Big Query loadJob attempt %v for jobId %v due to %v  Re-trying load Job ",(j+1),jobID, err.Error())
+	}
+	return status,jobID,err
+}
+
+func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string) (*bigquery.JobStatus, error) {
 	credential := strings.Replace(loadJob.Credential, "${env.HOME}", os.Getenv("HOME"), 1)
 	clientOption := option.WithServiceAccountFile(credential)
 	//ctx := context.Background() // Now passed from upstream via Constructor to perform graceful shutdown
 
 	client, err := bigquery.NewClient(sv.context, loadJob.ProjectID, clientOption)
 	if err != nil {
-		return nil, jobID, err
+		return nil,  err
 	}
 	defer client.Close()
 	ref := bigquery.NewGCSReference(loadJob.URIs...)
@@ -82,7 +97,7 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	if err := dataset.Create(sv.context, nil); err != nil {
 		// Create dataset if it does exist, otherwise ignore duplicate error
 		if !strings.Contains(err.Error(), ErrorDuplicate) {
-			return nil, jobID, err
+			return nil,  err
 		}
 	}
 	loader := dataset.Table(loadJob.TableID).LoaderFrom(ref)
@@ -91,7 +106,7 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 	loader.JobID = jobID
 	job, err := loader.Run(sv.context)
 	if err != nil {
-		return nil, jobID, err
+		return nil,  err
 	}
 	status, err := job.Wait(sv.context)
 	if err != nil && sv.context.Err() == context.Canceled {
@@ -99,8 +114,25 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 		if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
 			err = cancelErr
 		}
+	} else 	if err != nil && status == nil {
+		//error while retreiving status
+		log.Printf(" Error getting Job Status for jobId %v due to %v  Re-trying to get Status ",jobID, err.Error())
+		for i:=0; i<loadJob.FailRetry; i++ {
+			jobStatus,statusErr := job.Status(context.Background());
+			if statusErr != nil {
+				log.Printf(" Error attempt %v getting Job Status for jobId %v due to %v ",i+1,jobID, statusErr.Error())
+			} else if jobStatus != nil {
+				status = jobStatus
+				err = nil
+				if status.Done() {
+					break // out of for loop
+				}
+			}
+			time.Sleep(time.Duration(math.Pow(3,float64(i+1))) * time.Second)
+		}
 	}
-	return status, jobID, err
+
+	return status,  err
 }
 
 // Generate job ID following best practices:

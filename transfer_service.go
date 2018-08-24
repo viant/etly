@@ -592,6 +592,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		ProjectID:  parsedUrl.Host,
 		Schema:     schema,
 		URIs:       URIs,
+		FailRetry:  task.Transfer.FailRetry,
 	}
 	task.UpdateElapsed()
 
@@ -605,7 +606,9 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	var buffer bytes.Buffer
 	errorURLMap := make(map[string]bool)
 	if len(status.Errors) > 0 {
+		logger.Printf("Errors %v found in Job Status for jobId %v \n", len(status.Errors), jobId)
 		for _, er := range status.Errors {
+			logger.Printf("Error found in Job Status for jobId: %v Error: %v \n", jobId, er.Error())
 			errorURLMap[er.Location] = true
 			buffer.WriteString(er.Error())
 			buffer.WriteByte('\n')
