@@ -30,6 +30,7 @@ func NewTransferTaskForID(id string, transfer *Transfer) *TransferTask {
 //NewTransferTask create a new Transfer status
 func NewTransferTask(transfer *Transfer) *TransferTask {
 	now := time.Now()
+	transfer.Init()
 	result := &TransferTask{
 		Transfer: transfer,
 		Progress: &TransferProgress{
