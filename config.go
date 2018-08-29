@@ -31,7 +31,13 @@ type Transfer struct {
 	TimeOut              *Duration //Configured timeout for a transfer
 	Repeat               int//in transferOnce number of execution
 	ContentEnricher		 string
-	FailRetry			 int // number of times to retry if transfer fails
+	FailRetry			 *int // number of times to retry if transfer fails
+}
+
+func (t *Transfer) Init() {
+	if t.FailRetry == nil || *t.FailRetry < 1 {
+		*t.FailRetry = 1
+	}
 }
 
 func (t *Transfer) HasVariableExtraction() bool {

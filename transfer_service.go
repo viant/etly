@@ -592,7 +592,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 		ProjectID:  parsedUrl.Host,
 		Schema:     schema,
 		URIs:       URIs,
-		FailRetry:  task.Transfer.FailRetry,
+		FailRetry:  *task.Transfer.FailRetry,
 	}
 	task.UpdateElapsed()
 

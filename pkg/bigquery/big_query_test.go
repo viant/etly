@@ -99,7 +99,7 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 		description: "Load Job Cancel ",
 		expected: &response{
 			status: nil,
-			err: errors.New("ccontext canceled"),
+			err: errors.New("context canceled"),
 
 		},
 		job: &LoadJob{

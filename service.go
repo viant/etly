@@ -80,9 +80,6 @@ func (s *Service) runTransfer(transfer *Transfer) (tasks []*TransferTask, err er
 	if (transfer.nextRun == nil || transfer.nextRun.Before(now)) && !transfer.isRunning() {
 		transfer.setRunning(true)
 		defer transfer.setRunning(false)
-		if transfer.FailRetry < 1 {
-			transfer.FailRetry = 1
-		}
 		err = transfer.scheduleNextRun(now)
 		if err != nil {
 			logger.Printf("failed to schedule Transfer: %v %v", err, transfer)

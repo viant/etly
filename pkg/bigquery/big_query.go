@@ -109,29 +109,29 @@ func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string) (*bigquery.JobSt
 		return nil,  err
 	}
 	status, err := job.Wait(sv.context)
-	if err != nil && sv.context.Err() == context.Canceled {
-		log.Printf(" Cancelling Job %v due to %v \n",jobID, err.Error())
-		if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
-			err = cancelErr
+
+	defer func() {
+		if err != nil && sv.context.Err() == context.Canceled {
+			log.Printf(" Cancelling Job %v due to %v \n", jobID, err.Error())
+			if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
+				err = cancelErr
+			}
 		}
-	} else 	if err != nil && status == nil {
+	}()
+
+	if err != nil && status == nil {
 		//error while retreiving status
 		log.Printf(" Error getting Job Status for jobId %v due to %v  Re-trying to get Status ",jobID, err.Error())
 		for i:=0; i<loadJob.FailRetry; i++ {
-			jobStatus,statusErr := job.Status(context.Background());
-			if statusErr != nil {
-				log.Printf(" Error attempt %v getting Job Status for jobId %v due to %v ",i+1,jobID, statusErr.Error())
-			} else if jobStatus != nil {
-				status = jobStatus
-				err = nil
-				if status.Done() {
-					break // out of for loop
-				}
+			status,err = job.Wait(sv.context); // Wait calls Status()
+			if err != nil && sv.context.Err() == nil {
+				log.Printf(" Error attempt %v getting Job Status for jobId %v due to %v ",i+1,jobID, err.Error())
+			} else {
+				break;
 			}
 			time.Sleep(time.Duration(math.Pow(3,float64(i+1))) * time.Second)
 		}
 	}
-
 	return status,  err
 }
 
