@@ -212,7 +212,7 @@ outer:
 			if err != nil {
 				break outer
 			}
-			if err = transferRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, nil); err != nil {
+			if err = transferByteRecord(state, predicate, dataTypeProvider, encoded, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, nil); err != nil {
 				log.Printf("error when transferDataInBatch: %v", err)
 				break outer
 			}

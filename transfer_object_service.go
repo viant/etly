@@ -141,7 +141,7 @@ func expandWorkerVariables(text string, transfer *Transfer, source, target inter
 
 type TargetTransformation struct {
 	*ProcessedTransfer
-	targetRecords []string
+	targetRecords []bytes.Buffer
 }
 
 func getTargetKey(transfer *Transfer, source, target interface{}, state map[string]interface{}) (string, error) {
@@ -154,6 +154,8 @@ func getTargetKey(transfer *Transfer, source, target interface{}, state map[stri
 			result = strings.Replace(result, k, toolbox.AsString(v), len(result))
 		}
 	}
+	result = strings.Replace(result, ".gz", ".avro", -1)
+
 	if transfer.HasRecordLevelVariableExtraction() {
 		return expandWorkerVariables(result, transfer, source, target)
 	}
@@ -193,7 +195,7 @@ outer:
 				}
 			}
 		}
-		err := transferRecord(state, predicate, dataTypeProvider, line, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, request)
+		err := transferByteRecord(state, predicate, dataTypeProvider, line, transformer, transfer, transformedTargets, task, decodingError, contentEnricher, request)
 		if err != nil {
 			return nil, err
 		}
