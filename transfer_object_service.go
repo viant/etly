@@ -123,8 +123,29 @@ func (s *transferObjectService) Transfer(request *TransferObjectRequest) *Transf
 		return response
 	}
 
+//	if transfer.Source.DataFormat == "ndjson" && transfer.Target.DataFormat == "avro" {
+//		var processedTransfers, err = s.transferObjectFromNdjsonToAvro(content, request, task)
+//		task.Progress.FileProcessed++
+//		var response = &TransferObjectResponse{
+//			RecordProcessed: int(task.Progress.RecordProcessed),
+//			RecordSkipped:   int(task.Progress.RecordSkipped),
+//		}
+//		response.ProcessedTransfers = processedTransfers
+//		if err != nil {
+//			response.Error = fmt.Sprintf("hostname: %s, %v %v", hostName, transfer.Source.Resource.Name, err)
+//		}
+//
+//		return response
+//	}
+
 	return NewErrorTransferObjectResponse(fmt.Sprintf("Unsupported source format: %v: %v -> %v", transfer.Source.DataFormat, transfer.Source.Name, transfer.Target))
 
+}
+
+func  (s *transferObjectService)   transferObjectFromNdjsonToAvro(source []byte, request *TransferObjectRequest, task *TransferTask) ([]*ProcessedTransfer, error)  {
+	//TODO:
+
+	return nil, nil
 }
 
 func expandWorkerVariables(text string, transfer *Transfer, source, target interface{}) (string, error) {
@@ -217,3 +238,4 @@ func NewErrorTransferObjectResponse(message string) *TransferObjectResponse {
 		Error: "host:" + hostName + ", " + message,
 	}
 }
+
