@@ -452,7 +452,7 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		}(storageTransfer)
 	}
 
-	duration := getTimeoutFromTransfer(transfer) * 2
+	duration := getTimeoutFromTransfer(transfer)  + (time.Duration(1) * time.Second)
 	isTimeOut := toolbox.WaitTimeout(&wg, duration)
 	if isTimeOut {
 		return nil, fmt.Errorf("transfer timed out after duration :%v", duration)
@@ -597,7 +597,8 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	task.UpdateElapsed()
 
 	logger.Printf("loading: Table:%v * Dataset:%v * Files:%v\n", job.TableID, job.DatasetID, len(URIs))
-	status, jobId, err := bigquery.NewWithContext(s.context).Load(job)
+	timeout := getTimeoutFromTransfer(storageTransfer.Transfer)
+	status, jobId, err := bigquery.NewWithContext(s.context).Load(job, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute GBQ load job: %v", err)
 	}
@@ -616,16 +617,14 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 			if er.Location == "" {
 				continue
 			}
-			if strings.Contains(er.Message, "Field:") || strings.Contains(er.Message, "field:") {
-				// Log this to meta file so we can skip it next time.
-				meta.Processed[er.Location] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
-					er.Location,
-					"error loading to GBQ",
-					er.Error(),
-					0,
-					0,
-					&startTime)
-			}
+			// Log this to meta file so we can skip it next time.
+			meta.Processed[er.Location] = NewObjectMeta(storageTransfer.Transfer.Source.Name,
+				er.Location,
+				"error loading to GBQ",
+				er.Error(),
+				0,
+				0,
+				&startTime)
 		}
 		return nil, fmt.Errorf("failed to perform GBQ load: %v", buffer.String())
 	}

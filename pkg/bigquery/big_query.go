@@ -11,13 +11,14 @@ import (
 	"os"
 	"log"
 	"math"
+	"fmt"
 )
 
 // Service provides loading capability from Cloud Storage to BigQuery
 type Service interface {
 	// Load performs a gbq loading job. This method is a blocking operation so it is ideal
 	// to be executed in a go routine.
-	Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error)
+	Load(loadJob *LoadJob, timeout time.Duration) (*bigquery.JobStatus, string, error)
 }
 
 type gbqService struct{
@@ -58,7 +59,7 @@ func NewWithContext(context context.Context) Service {
 	}
 }
 
-func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error) {
+func (sv *gbqService) Load(loadJob *LoadJob, timeout time.Duration) (*bigquery.JobStatus, string, error) {
 	jobID := sv.generateJobID(
 		"ProjectID", loadJob.ProjectID,
 		"DatasetID", loadJob.DatasetID,
@@ -66,17 +67,23 @@ func (sv *gbqService) Load(loadJob *LoadJob) (*bigquery.JobStatus, string, error
 		"Ts", strconv.FormatInt(time.Now().Unix(), 10))
 	var status *bigquery.JobStatus
 	var err error
-	for j:=0; j<loadJob.FailRetry; j++ {
-		status, err = sv.loadJobId(loadJob, jobID)
-		if(sv.context.Err() == context.Canceled ||  err == nil) {
-			break
-		}
-		log.Printf(" Error Big Query loadJob attempt %v for jobId %v due to %v  Re-trying load Job ",(j+1),jobID, err.Error())
+	status, err = sv.loadJobId(loadJob, jobID, timeout)
+
+	if err != nil {
+		log.Printf(" Error Big Query loadJob attempt for jobId %v due to %v  ",jobID, err.Error())
+	} else if (IsContextCancelled(sv.context)) {
+		log.Printf(" Cancelled Big Query loadJob attempt for jobId %v ",jobID)
 	}
 	return status,jobID,err
 }
 
-func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string) (*bigquery.JobStatus, error) {
+func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string, timeout time.Duration) (status *bigquery.JobStatus, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("ERROR recovered from panic bigquery-JobId: %v Message: %v", jobID, r.(error))
+			status = nil
+		}
+	}()
 	credential := strings.Replace(loadJob.Credential, "${env.HOME}", os.Getenv("HOME"), 1)
 	clientOption := option.WithServiceAccountFile(credential)
 	//ctx := context.Background() // Now passed from upstream via Constructor to perform graceful shutdown
@@ -108,18 +115,14 @@ func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string) (*bigquery.JobSt
 	if err != nil {
 		return nil,  err
 	}
-	status, err := job.Wait(sv.context)
+	timeoutCtx, timeoutCancel := context.WithTimeout(sv.context, timeout)
+	status, err = job.Wait(timeoutCtx)
 
-	defer func() {
-		if err != nil && sv.context.Err() == context.Canceled {
-			log.Printf(" Cancelling Job %v due to %v \n", jobID, err.Error())
-			if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
-				err = cancelErr
-			}
-		}
-	}()
+	defer cancelJob(job, err, sv.context, timeoutCtx);
+	//defers are executed LIFO order
+	defer timeoutCancel()
 
-	if err != nil && status == nil {
+	if err != nil && status == nil && timeoutCtx.Err() != context.DeadlineExceeded {
 		//error while retreiving status
 		log.Printf(" Error getting Job Status for jobId %v due to %v  Re-trying to get Status ",jobID, err.Error())
 		for i:=0; i<loadJob.FailRetry; i++ {
@@ -150,4 +153,14 @@ func (sv *gbqService) generateJobID(kv ...string) string {
 		buffer.WriteString(PairSeparator)
 	}
 	return buffer.String()
+}
+
+func cancelJob(job *bigquery.Job, err error, ctxs ...context.Context)  {
+	isContextsCanclled := IsContextsCancelled(ctxs)
+	if err != nil && isContextsCanclled {
+		log.Printf(" Cancelling Job %v due to %v \n", job.ID(), err.Error())
+		if cancelErr := job.Cancel(context.Background()); cancelErr != nil { // Cannot reuse context once cancelled, hence, create new
+			err = cancelErr
+		}
+	}
 }
