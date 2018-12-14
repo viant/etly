@@ -116,6 +116,8 @@ func (sv *gbqService) loadJobId(loadJob *LoadJob, jobID string, timeout time.Dur
 		return nil,  err
 	}
 	timeoutCtx, timeoutCancel := context.WithTimeout(sv.context, timeout)
+	log.Printf("Waiting on bigquery jobId(%v) for duration(%v) \n", jobID, timeout)
+
 	status, err = job.Wait(timeoutCtx)
 
 	defer cancelJob(job, err, sv.context, timeoutCtx);

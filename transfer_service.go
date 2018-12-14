@@ -453,6 +453,7 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 	}
 
 	duration := getTimeoutFromTransfer(transfer)  + (time.Duration(1) * time.Second)
+	log.Printf("Waiting transfer: ID(%s), NAME(%s), TIMEOUT(%s) \n", task.Id, transfer.Name, duration)
 	isTimeOut := toolbox.WaitTimeout(&wg, duration)
 	if isTimeOut {
 		return nil, fmt.Errorf("transfer timed out after duration :%v", duration)
