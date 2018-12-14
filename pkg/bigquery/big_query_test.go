@@ -51,7 +51,7 @@ func TestGbqService_Load(t *testing.T) {
 		URIs:       URIs,
 		FailRetry:  3,
 	}
-	status, msg, err := svc.Load(job)
+	status, msg, err := svc.Load(job, 10*time.Minute)
 	t.Logf("Status: %+v\n", status)
 	t.Logf("Msg: %v\n", msg)
 	if status.Err() != nil {
@@ -73,10 +73,12 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 	}
 	type usecase struct {
 		description string
-		job    *LoadJob
-		wait   time.Duration
+		skip        bool
+		job    		*LoadJob
+		wait   		time.Duration // wait to simulate external Cancel
+		timeout		time.Duration // load Timeout to Big-Query
 		expected    *response
-		chk    int
+		chk    		int
 	}
 
 	credential := "${env.HOME}/.secret/bq.json"
@@ -93,10 +95,15 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 		"gs://etly_test_errors_2/test/cancel_test_02.json.gz",
 	}
 
+	URIs_3 := []string{
+		"gs://etly_test_errors_2/test/cancel_test_01.json.gz",
+	}
+
 	var useCases = []*usecase(nil)
 
 	useCases = append(useCases,&usecase{
 		description: "Load Job Cancel ",
+		skip: false,
 		expected: &response{
 			status: nil,
 			err: errors.New("context canceled"),
@@ -109,14 +116,16 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 			DatasetID:  "etly_test",
 			TableID:    "etly_errors_2",
 			URIs:       URIs,
-			FailRetry:  3,
+			FailRetry:  1,
 		},
-		wait:15,
-		chk:dsunit.FullTableDatasetCheckPolicy,
+		wait:15 * time.Second, // NOT sufficient to load big 67MB file
+		timeout:60 * time.Minute, //long timeout to test external cancel
+		chk:dsunit.FullTableDatasetCheckPolicy, // We want to check full table to check nothing is inserted
 	})
 
 	useCases = append(useCases,&usecase{
 		description: "Load Job Cancel Long Wait ",
+		skip:false,
 		expected: &response{
 			status: &bigquery.JobStatus{
 				State:bigquery.Done,
@@ -131,32 +140,61 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 			DatasetID:  "etly_test",
 			TableID:    "etly_errors_2",
 			URIs:       URIs_2,
-			FailRetry:  3,
+			FailRetry:  1,
 		},
-		wait:15,		chk:dsunit.SnapshotDatasetCheckPolicy,
+		wait:15 * time.Second, //sufficient to load small 140 bytes file
+		timeout:60 * time.Minute, //long timeout to test external cancel
+		chk:dsunit.SnapshotDatasetCheckPolicy,
 	})
 
-	i := 1
-	for _,useCase := range useCases {
 
+	useCases = append(useCases,&usecase{
+		description: "Load Job Bigquery timeout ",
+		skip: false,
+		expected: &response{
+			status: &bigquery.JobStatus{
+				State:bigquery.Done,
+			},
+			err: nil,
+
+		},
+		job: &LoadJob{
+			ProjectID:  "tech-ops-poc",
+			Schema:     schema,
+			Credential: credential,
+			DatasetID:  "etly_test",
+			TableID:    "etly_errors_3",
+			URIs:       URIs_3,
+			FailRetry:  1,
+		},
+		wait:10 * time.Minute, // Should get cancelled before the external cancellation occurs
+		timeout:30 * time.Second, //short timeout to test bigquery timeout
+		chk:dsunit.FullTableDatasetCheckPolicy, // We want to check full table to check nothing is inserted
+	})
+
+	for i,useCase := range useCases {
+		j := i+1
+		if useCase.skip {
+			log.Printf("Skipping %v\n" ,  j)
+			continue
+		}
 		if dsunit.InitFromURL(t, "test/config/init.yaml") {
-			if !dsunit.PrepareFor(t, "etly_test", "test/data", fmt.Sprintf("use_case_%d",i)) {
+			if !dsunit.PrepareFor(t, "etly_test", "test/data", fmt.Sprintf("use_case_%d",j)) {
 				return
 			}
 			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			svc := NewWithContext(ctx)
 			go waiter(useCase.wait, cancel)
-			resultStatus, jobId, resultErr := svc.Load(useCase.job)
+			resultStatus, jobId, resultErr := svc.Load(useCase.job, useCase.timeout)
 			t.Log(" Exited from Job ", jobId)
 			res := &response{
 				status: resultStatus,
 				err: resultErr,
 			}
 			assertly.AssertValues(t, useCase.expected, res)
-
-			dsunit.ExpectFor(t, "etly_test", useCase.chk, "test/data", fmt.Sprintf("use_case_%d",i))
-			i++
+			time.Sleep(time.Duration(5) * time.Minute)
+			dsunit.ExpectFor(t, "etly_test", useCase.chk, "test/data", fmt.Sprintf("use_case_%d",j))
 		}
 
 	}
@@ -167,7 +205,7 @@ func TestGbqService_LoadCancelContextUseCases(t *testing.T) {
 
 func waiter(waitTime time.Duration, cancel context.CancelFunc) {
 	log.Println("Waiting to cancel Context... ")
-	time.Sleep(waitTime * time.Second)
+	time.Sleep(waitTime)
 	//cancel after loader Run finishes or test ends
 	cancel()
 	log.Println(" Called Context Cancel  ")
