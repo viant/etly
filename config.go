@@ -150,6 +150,17 @@ type Duration struct {
 	Unit     string
 }
 
+func (d *Duration) Clone() *Duration {
+	if d == nil {
+		return nil
+	}
+	var result = &Duration{
+		Duration: d.Duration,
+		Unit: d.Unit,
+	}
+	return  result
+}
+
 func (d *Duration) TimeUnit() (time.Duration, error) {
 	switch strings.ToLower(d.Unit) {
 	case "day":
@@ -215,8 +226,9 @@ func (t *Transfer) Clone() *Transfer {
 		Source:               t.Source.Clone(),
 		Target:               t.Target.Clone(),
 		Meta:                 t.Meta.Clone(),
-		TimeWindow:           t.TimeWindow,
-		Frequency:            t.Frequency,
+		TimeWindow:           t.TimeWindow.Clone(),
+		TimeOut:              t.TimeOut.Clone(),
+		Frequency:            t.Frequency.Clone(),
 		MaxParallelTransfers: t.MaxParallelTransfers,
 		MaxTransfers:         t.MaxTransfers,
 		Transformer:          t.Transformer,

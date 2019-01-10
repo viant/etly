@@ -109,7 +109,12 @@ func (s *transferService) transferDataFromURLSources(transfers []*Transfer, task
 	return nil
 }
 
-func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
+func (s *transferService) LoadMeta(metaResource *Resource) (meta *Meta, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("ERROR recovered from panic reading meta: %v Message: %v", metaResource.Name, r.(error))
+		}
+	}()
 	storageService, err := getStorageService(metaResource)
 	if err != nil {
 		return nil, err
@@ -137,7 +142,12 @@ func (s *transferService) LoadMeta(metaResource *Resource) (*Meta, error) {
 	return result, decodeJSONTarget(content, &result)
 }
 
-func (s *transferService) persistMeta(resourcedMeta *ResourcedMeta) error {
+func (s *transferService) persistMeta(resourcedMeta *ResourcedMeta) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("ERROR recovered from panic persisting resource: %v Message: %v", resourcedMeta.Resource.Name, r.(error))
+		}
+	}()
 	storageService, err := getStorageService(resourcedMeta.Resource)
 	if err != nil {
 		return err
@@ -394,6 +404,7 @@ func (s *transferService) transferDataFromDatastoreSource(index int, transfer *T
 }
 
 func (s *transferService) transferDataFromURLSource(index int, transfer *Transfer, task *TransferTask) (result []*Meta, err error) {
+
 	storageService, err := getStorageService(transfer.Source.Resource)
 	if err != nil {
 		return nil, err
@@ -451,7 +462,6 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 
 		}(storageTransfer)
 	}
-
 	duration := getTimeoutFromTransfer(transfer)  + (time.Duration(1) * time.Second)
 	log.Printf("Waiting transfer: ID(%s), NAME(%s), TIMEOUT(%s) \n", task.Id, transfer.Name, duration)
 	isTimeOut := toolbox.WaitTimeout(&wg, duration)
@@ -494,7 +504,7 @@ func (s *transferService) filterStorageObjects(storageTransfer *StorageObjectTra
 			continue
 		}
 		if storageTransfer.Transfer.MaxTransfers > 0 && elgibleStorageCountSoFar >= storageTransfer.Transfer.MaxTransfers {
-			continue
+			break
 		}
 		if candidate.FileInfo().Size() == 0 {
 			//Skipping zero byte files
