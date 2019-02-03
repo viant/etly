@@ -2,7 +2,7 @@ package etly
 
 import (
 	"github.com/viant/toolbox/storage"
-	_ "github.com/viant/toolbox/storage/aws"
+	_ "github.com/viant/toolbox/storage/s3"
 	_ "github.com/viant/toolbox/storage/gs"
 	_ "github.com/viant/toolbox/storage/scp"
 )
