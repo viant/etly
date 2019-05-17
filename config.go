@@ -32,7 +32,6 @@ type Transfer struct {
 	Repeat               int//in transferOnce number of execution
 	ContentEnricher		 string
 	FailRetry			 *int // number of times to retry if transfer fails
-	UseFullData			 bool //log all the data 100% of the time - used during end-2-end tests
 }
 
 func (t *Transfer) Init() {
@@ -237,7 +236,6 @@ func (t *Transfer) Clone() *Transfer {
 		Filter:               t.Filter,
 		ContentEnricher:	  t.ContentEnricher,
 		FailRetry:            t.FailRetry,
-		UseFullData:          t.UseFullData,
 	}
 }
 
