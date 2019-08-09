@@ -36,7 +36,8 @@ type Transfer struct {
 
 func (t *Transfer) Init() {
 	if t.FailRetry == nil || *t.FailRetry < 1 {
-		*t.FailRetry = 1
+		var one = 1
+		t.FailRetry = &one
 	}
 }
 
@@ -208,7 +209,11 @@ func (t *Transfer) setRunning(running bool) {
 }
 
 func (t *Transfer) String() string {
-	return "[id: " + t.Name + ", SourceURL: " + t.Source.Name + ", Target: " + t.Target.Name + "]"
+	sourceTime := time.Now()
+	name := expandDateExpressionIfPresent(t.Name, &sourceTime)
+	source := expandDateExpressionIfPresent(t.Source.Name, &sourceTime)
+	target  := expandDateExpressionIfPresent(t.Target.Name, &sourceTime)
+	return "[id: " + name + ", SourceURL: " + source + ", Target: " + target + "]"
 }
 
 func (t *Transfer) New(source, target, MetaURL string) *Transfer {
