@@ -24,11 +24,11 @@ func TestDuration_Get(t *testing.T) {
 	}
 }
 
-func TestConfigPrintFormat(t *testing.T) {
+func TestTransferPrintFormat(t *testing.T) {
 	const sourceStringToEscape = "<dateFormat:yyyy>/<dateFormat:MM>/<dateFormat:dd>/<dateFormat:HH>"
 	const targetStringToEscape = "<dateFormat:HH>"
 
-	transferConfig, err := NewTransferConfigFromURL("file://" + GetCurrentWorkingDir() + "/test/test_nobid_config.json")
+	transferConfig, err := NewTransferConfigFromURL("file://" + GetCurrentWorkingDir() + "/test/transfer_config3.json")
 	assert.Nil(t, err)
 	assert.NotNil(t, transferConfig)
 	assert.NotNil(t, transferConfig.Transfers[0])
