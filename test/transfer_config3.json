@@ -1,0 +1,37 @@
+{
+  "Transfers": [
+    {
+      "Name": "Transfer Name",
+      "Source": {
+        "Name": "s3://path/to/bucket/<dateFormat:yyyy>/<dateFormat:MM>/<dateFormat:dd>/<dateFormat:HH>/",
+        "Type": "url"
+      },
+      "Target": {
+        "Name": "gs://path/to/storage/$date/<dateFormat:HH>",
+        "Type": "url"
+      },
+      "Meta": {
+        "Name": "gs://path/to/meta.json"
+      },
+      "TimeWindow": {
+        "Duration": 2,
+        "Unit": "hour"
+      },
+      "TimeOut": {
+        "Duration": 6,
+        "Unit": "min"
+      },
+      "Frequency": {
+        "Duration": 2,
+        "Unit": "sec"
+      },
+      "VariableExtraction": [
+        {
+          "Name": "$date",
+          "Source": "target",
+          "Provider": "requestDate"
+        }
+      ]
+    }
+  ]
+}
