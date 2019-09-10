@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/viant/toolbox"
 	"context"
+	"github.com/viant/toolbox"
 )
 
 const uriBasePath = "/etly/"
@@ -101,9 +101,8 @@ func NewServerWithContext(context context.Context, config *ServerConfig, transfe
 			Handler:    service.TransferOnce,
 			Parameters: []string{"request"},
 		},
-
 		toolbox.ServiceRouting{
-			HTTPMethod: "Get",
+			HTTPMethod: "GET",
 			URI:        uriBasePath + "version",
 			Handler:    service.Version,
 			Parameters: []string{},
