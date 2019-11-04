@@ -28,6 +28,7 @@ type Task struct {
 	StatusCode int32
 	StartTime  time.Time
 	Error      string
+	SubTransfers map[string]*SubTransfer
 	*sync.Mutex
 }
 

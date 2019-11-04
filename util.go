@@ -260,3 +260,37 @@ func getTimeoutFromTransfer(t *Transfer) time.Duration {
 	//Default is 10 mins
 	return defaultTimeout
 }
+
+
+func  setSubTransfer(transfer *Transfer, task *TransferTask) {
+	newSubTransfer := transfer.NewSubTransfer()
+	if task != nil && task.Task != nil && task.Task.SubTransfers != nil {
+		task.Task.SubTransfers[transfer.Source.Name] = newSubTransfer
+	}
+
+}
+
+func hasSubTransfer(task *Task,sourceName string) bool {
+	if task != nil && task.SubTransfers != nil && task.SubTransfers[sourceName] != nil {
+		return true
+	}
+	return false
+}
+
+
+func updateSubTransfers(storageTransfer *StorageObjectTransfer, task *Task, meta *Meta) {
+	sourceName := storageTransfer.Transfer.Source.Name
+	if hasSubTransfer(task, sourceName) {
+		task.SubTransfers[sourceName].TargetStatus.ProcessingStatus = meta.Status
+		for key, value := range meta.Processed {
+			if value != nil && value.Error != "" {
+				transferError := &TransferError{}
+				transferError.SourceName = key
+				transferError.Error = value.Error
+				task.SubTransfers[sourceName].TransferErrors = append(task.SubTransfers[sourceName].TransferErrors, transferError)
+			}
+		}
+		task.SubTransfers[sourceName].End = time.Now()
+
+	}
+}
