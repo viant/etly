@@ -34,6 +34,27 @@ type Transfer struct {
 	FailRetry			 *int // number of times to retry if transfer fails
 }
 
+type SubTransfer struct {
+	SourceStatus    *StatusInfo
+	TargetStatus    *StatusInfo
+	Start           time.Time
+	End             time.Time
+	TransferErrors   []*TransferError
+}
+
+type StatusInfo struct {
+	Name string
+	ProcessingStatus *ProcessingStatus
+}
+
+type TransferError struct {
+	SourceName string
+	Error      string
+}
+
+
+
+
 func (t *Transfer) Init() {
 	if t.FailRetry == nil || *t.FailRetry < 1 {
 		var one = 1
@@ -222,6 +243,26 @@ func (t *Transfer) New(source, target, MetaURL string) *Transfer {
 	result.Target.Name = target
 	result.Meta.Name = MetaURL
 	return result
+}
+
+
+func (t *Transfer) NewSubTransfer() *SubTransfer {
+	subTransfer := &SubTransfer{}
+	sourceStatus := &StatusInfo{ProcessingStatus:&ProcessingStatus{}}
+    targetStatus := &StatusInfo{ProcessingStatus:&ProcessingStatus{}}
+	subTransfer.SourceStatus = sourceStatus
+	subTransfer.TargetStatus = targetStatus
+	if t != nil {
+		if t.Source != nil {
+			subTransfer.SourceStatus.Name = t.Source.Name
+		}
+		if t.Target != nil {
+			subTransfer.TargetStatus.Name = t.Target.Name
+		}
+	}
+	subTransfer.Start = time.Now()
+	subTransfer.TransferErrors = make([]*TransferError,0)
+	return subTransfer
 }
 
 //Clone creates a copy of the Transfer

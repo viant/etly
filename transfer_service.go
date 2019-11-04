@@ -14,11 +14,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"context"
 	"github.com/viant/dsc"
 	"github.com/viant/etly/pkg/bigquery"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/storage"
-	"context"
 )
 
 const (
@@ -101,6 +101,7 @@ func (s *transferService) transferDataFromDatastoreSources(transfers []*Transfer
 }
 func (s *transferService) transferDataFromURLSources(transfers []*Transfer, task *TransferTask) error {
 	for i, transfer := range transfers {
+		setSubTransfer(transfer, task)
 		_, err := s.transferDataFromURLSource(i, transfer, task)
 		if err != nil {
 			return err
@@ -418,6 +419,11 @@ func (s *transferService) transferDataFromURLSource(index int, transfer *Transfe
 		log.Printf("Finish, no candidate to process for %v\n", transfer.Source.Name)
 		return nil, nil
 	}
+
+	sourceName := transfer.Source.Name
+	if hasSubTransfer(task.Task,sourceName) &&  candidates != nil {
+		task.Task.SubTransfers[sourceName].SourceStatus.ProcessingStatus.ResourceProcessed = len(candidates)
+	}
 	if !transfer.HasVariableExtraction() {
 		meta, err := s.transferFromURLSource(&StorageObjectTransfer{
 			Transfer:       transfer,
@@ -563,6 +569,7 @@ func (s *transferService) transferFromURLToDatastore(storageTransfer *StorageObj
 	}
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
+		updateSubTransfers(storageTransfer,task.Task,meta)
 		e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta})
 		if err == nil {
 			err = e
@@ -669,6 +676,7 @@ func (s *transferService) transferFromURLToURL(storageTransfer *StorageObjectTra
 
 	defer func() {
 		s.updateMetaStatus(meta, storageTransfer, err)
+		updateSubTransfers(storageTransfer,task.Task,meta)
 		if e := s.persistMeta(&ResourcedMeta{meta, storageTransfer.Transfer.Meta}); e != nil {
 			log.Printf("failed to persist meta status for url:%v, Error:%v", meta.URL, e)
 		}

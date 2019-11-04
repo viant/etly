@@ -44,5 +44,6 @@ func NewTransferTask(transfer *Transfer) *TransferTask {
 		StartTime: time.Now(),
 		Mutex:     &sync.Mutex{},
 	}
+	result.Task.SubTransfers = make(map[string]*SubTransfer)
 	return result
 }
