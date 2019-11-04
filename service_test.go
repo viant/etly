@@ -201,4 +201,16 @@ func TestService_GetTasksByStatus(t *testing.T) {
 	assert.NotNil(t, response)
 	assert.NotNil(t, response.Tasks)
 	assert.Condition(t, func() bool { return len(response.Tasks) >= 1 })
+	task := response.Tasks[0]
+	assert.NotNil(t,task)
+	subTransfers := task.SubTransfers
+	assert.Equal(t,1, len(subTransfers))
+	sourceKey := strings.ReplaceAll(transferConfig.Transfers[0].Source.Name,"<pwd>",GetCurrentWorkingDir())
+	subTransfer := subTransfers[sourceKey]
+	assert.Equal(t,subTransfer.SourceStatus.ProcessingStatus.ResourceProcessed,3)
+	assert.Equal(t,subTransfer.TargetStatus.ProcessingStatus.ResourceProcessed,2)
+	assert.Equal(t,subTransfer.TargetStatus.ProcessingStatus.ResourcePending,1)
+	assert.Equal(t,subTransfer.TargetStatus.ProcessingStatus.RecordProcessed,4)
+	assert.Contains(t,subTransfer.TransferErrors[0].Error,"failed to decode json (1 times): unexpected EOF, {\"werwe:")
+
 }
