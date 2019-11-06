@@ -301,17 +301,12 @@ type SubTransfer struct {
 	TargetStatus    *StatusInfo
 	Start           time.Time
 	End             time.Time
-	TransferErrors   []*TransferError
+	TransferErrors  []*Error
 }
 
 type StatusInfo struct {
 	Name string
 	ProcessingStatus *ProcessingStatus
-}
-
-type TransferError struct {
-	SourceName string
-	Error      string
 }
 
 
@@ -330,6 +325,5 @@ func (t *Transfer) NewSubTransfer() *SubTransfer {
 		}
 	}
 	subTransfer.Start = time.Now()
-	subTransfer.TransferErrors = make([]*TransferError,0)
 	return subTransfer
 }

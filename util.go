@@ -282,14 +282,7 @@ func updateSubTransfers(storageTransfer *StorageObjectTransfer, task *Task, meta
 	sourceName := storageTransfer.Transfer.Source.Name
 	if hasSubTransfer(task, sourceName) {
 		task.SubTransfers[sourceName].TargetStatus.ProcessingStatus = meta.Status
-		for key, value := range meta.Processed {
-			if value != nil && value.Error != "" {
-				transferError := &TransferError{}
-				transferError.SourceName = key
-				transferError.Error = value.Error
-				task.SubTransfers[sourceName].TransferErrors = append(task.SubTransfers[sourceName].TransferErrors, transferError)
-			}
-		}
+		task.SubTransfers[sourceName].TransferErrors = meta.Errors
 		task.SubTransfers[sourceName].End = time.Now()
 
 	}
